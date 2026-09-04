@@ -84,9 +84,10 @@ module IntegrationGenerator
     def analyze(argv)
       options = { format: "yaml" }
       parser = OptionParser.new do |opts|
-        opts.banner = "Usage: integrate analyze --spec PATH [--provider SLUG] [--format yaml|json]"
+        opts.banner = "Usage: integrate analyze --spec PATH [--provider SLUG] [--overrides PATH] [--format yaml|json]"
         opts.on("--spec PATH", "OpenAPI .yaml, .yml, or .json file") { |value| options[:spec] = value }
         opts.on("--provider SLUG", "Provider identifier for generated configuration") { |value| options[:provider] = value }
+        opts.on("--overrides PATH", "Validated generic overrides YAML/JSON") { |value| options[:overrides] = value }
         opts.on("--format FORMAT", %w[yaml json], "Output format: yaml (default) or json") do |value|
           options[:format] = value
         end
@@ -101,6 +102,7 @@ module IntegrationGenerator
 
       document = OpenAPI::Parser.parse_file(options[:spec])
       manifest = Analyzer::ManifestBuilder.new(document, provider_slug: options[:provider]).build
+      manifest = apply_overrides(manifest, options[:overrides]) if options[:overrides]
       serialized = options[:format] == "json" ? JSON.pretty_generate(manifest.to_h) : YAML.dump(manifest.to_h)
       @out.puts(serialized)
       0
@@ -109,10 +111,11 @@ module IntegrationGenerator
     def generate(argv)
       options = {}
       parser = OptionParser.new do |opts|
-        opts.banner = "Usage: integrate generate (--spec PATH | --manifest PATH) --output DIR [--provider SLUG]"
+        opts.banner = "Usage: integrate generate (--spec PATH | --manifest PATH) --output DIR [--provider SLUG] [--overrides PATH]"
         opts.on("--spec PATH", "OpenAPI input; the CLI builds a manifest first") { |value| options[:spec] = value }
         opts.on("--manifest PATH", "Prebuilt Integration Manifest YAML/JSON") { |value| options[:manifest] = value }
         opts.on("--provider SLUG", "Provider identifier; valid only with --spec") { |value| options[:provider] = value }
+        opts.on("--overrides PATH", "Validated generic overrides; valid only with --spec") { |value| options[:overrides] = value }
         opts.on("--output DIR", "New output directory; existing paths are never overwritten") { |value| options[:output] = value }
         opts.on("-h", "--help", "Show this help") do
           @out.puts(opts)
@@ -131,12 +134,16 @@ module IntegrationGenerator
       if options[:manifest] && options[:provider]
         raise OptionParser::InvalidArgument, "--provider cannot override a prebuilt manifest"
       end
+      if options[:manifest] && options[:overrides]
+        raise OptionParser::InvalidArgument, "--overrides applies to inferred manifests and cannot be used with --manifest"
+      end
 
       manifest = if options[:manifest]
                    ProviderIR::ManifestLoader.load_file(options[:manifest])
                  else
                    document = OpenAPI::Parser.parse_file(options[:spec])
-                   Analyzer::ManifestBuilder.new(document, provider_slug: options[:provider]).build
+                   inferred = Analyzer::ManifestBuilder.new(document, provider_slug: options[:provider]).build
+                   options[:overrides] ? apply_overrides(inferred, options[:overrides]) : inferred
                  end
       artifacts = Generator::ArtifactBundle.new(manifest).render
       target = Generator::OutputWriter.new.write(artifacts, options[:output])
@@ -144,6 +151,11 @@ module IntegrationGenerator
       @out.puts("Generated #{artifacts.length} artifacts in #{target}")
       artifacts.each_key { |name| @out.puts("- #{name}") }
       0
+    end
+
+    def apply_overrides(manifest, path)
+      override_data = Overrides::Loader.load_file(path)
+      Overrides::Applier.new(manifest, override_data, path: path).apply
     end
   end
 end

@@ -129,7 +129,7 @@ module IntegrationGenerator
 
             def check_conditions(operation, request_method)
               _logical_gateway_method = request_method
-              mappings_for("create_payout").filter_map do |mapping|
+              required_mapping_errors = mappings_for("create_payout").filter_map do |mapping|
                 next unless mapping["required"]
                 next if present?(read_operation_path(operation, mapping["source_candidate"]))
 
@@ -139,6 +139,7 @@ module IntegrationGenerator
                   message: "Required provider field #{mapping['target']} has no mapped operation value"
                 }
               end
+              required_mapping_errors + conditional_requirement_errors(operation)
             end
 
             def create_request(operation, request_method: nil, allow_unreviewed: false)
@@ -430,6 +431,68 @@ module IntegrationGenerator
 
             def mappings_for(intent)
               ADAPTER_CONFIG.dig("field_mappings", intent, "request") || []
+            end
+
+            def conditional_requirement_errors(operation)
+              conditional_requirements.filter_map do |requirement|
+                # Text-derived rules remain review-only until an override confirms them.
+                next if requirement["requires_review"]
+
+                field = requirement["field"]
+                condition = requirement["required_if"] || {}
+                condition_field = condition["field"]
+                expected = condition["equals"]
+                condition_source = confirmed_source_for_provider_field(condition_field)
+                required_source = confirmed_source_for_provider_field(field)
+
+                unless condition_source && required_source
+                  raise ConfigurationError,
+                        "Conditional requirement for #{field} needs confirmed field mappings with source candidates"
+                end
+
+                actual = read_operation_path(operation, condition_source)
+                next unless values_equal?(actual, expected)
+                next if present?(read_operation_path(operation, required_source))
+
+                {
+                  code: "conditional_required_field_missing",
+                  field: required_source,
+                  message: "Provider field #{field} is required when #{condition_field} equals #{expected.inspect}"
+                }
+              end
+            end
+
+            def conditional_requirements
+              ADAPTER_CONFIG.dig("transformations", "conditional_requirements") || []
+            end
+
+            def confirmed_source_for_provider_field(provider_field)
+              mappings = mappings_for("create_payout")
+              direct = mappings.find { |mapping| mapping["target"] == provider_field }
+              return mapping_source(direct) if direct
+
+              parent = mappings.select do |mapping|
+                target = mapping["target"].to_s
+                provider_field.to_s.start_with?("#{target}.")
+              end.max_by { |mapping| mapping["target"].to_s.length }
+              return nil unless parent
+
+              source = mapping_source(parent)
+              return nil unless source
+
+              suffix = provider_field.to_s.delete_prefix("#{parent['target']}.")
+              "#{source}.#{suffix}"
+            end
+
+            def mapping_source(mapping)
+              return nil unless mapping && !mapping["requires_review"]
+
+              source = mapping["source_candidate"]
+              present?(source) ? source : nil
+            end
+
+            def values_equal?(actual, expected)
+              !actual.nil? && actual.to_s == expected.to_s
             end
 
             def response_mappings_for(intent)

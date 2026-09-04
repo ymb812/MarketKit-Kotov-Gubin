@@ -13,6 +13,7 @@ module IntegrationGenerator
         sections = [
           title,
           source_and_servers,
+          review_provenance,
           capabilities,
           authentication,
           field_mappings,
@@ -27,6 +28,44 @@ module IntegrationGenerator
       end
 
       private
+
+      def review_provenance
+        audit = @manifest["overrides"] || { "applied" => false, "applied_changes" => [], "resolved_warnings" => [] }
+        lines = ["## Review provenance", "", "### Inferred", ""]
+        lines << "Semantic facts not listed under Overridden remain analyzer inferences with their manifest confidence/evidence."
+        lines << ""
+        lines << "### Overridden"
+        lines << ""
+        if audit["applied"]
+          lines << "- Override version: `#{audit['override_version']}`"
+          lines << "- Source: #{Support.escape_markdown(audit['source'])}"
+          lines << "- Reason: #{Support.escape_markdown(audit['reason'])}"
+          lines << "- File: `#{Support.escape_markdown(audit['file'])}`" if audit["file"]
+          audit.fetch("applied_changes", []).each do |change|
+            lines << "- `#{Support.escape_markdown(change['path'])}` — confirmed or changed by override"
+          end
+          lines << ""
+          lines << "Resolved analyzer warnings are retained in the manifest audit:"
+          audit.fetch("resolved_warnings", []).each do |entry|
+            warning = entry.fetch("warning")
+            lines << "- **#{warning['code']}** (`#{warning['location']}`) — #{entry['resolution']}"
+          end
+        else
+          lines << "No overrides were applied."
+        end
+        lines << ""
+        lines << "### Still unresolved"
+        lines << ""
+        if @manifest["warnings"].empty?
+          lines << "No analyzer warnings remain unresolved."
+        else
+          @manifest["warnings"].each do |warning|
+            location = warning["location"] ? " (`#{warning['location']}`)" : ""
+            lines << "- **#{warning['code']}**#{location}: #{Support.escape_markdown(warning['message'])}"
+          end
+        end
+        lines.join("\n")
+      end
 
       def title
         name = @manifest.dig("provider", "display_name") || @manifest.dig("provider", "slug")
@@ -103,15 +142,15 @@ module IntegrationGenerator
         lines = [
           "## Field mappings",
           "",
-          "| Capability | Role | Provider target | Location | Internal source candidate | Confidence | Review |",
-          "|---|---|---|---|---|---:|---|"
+          "| Capability | Role | Provider target | Location | Internal source candidate | Confidence | Provenance | Review |",
+          "|---|---|---|---|---|---:|---|---|"
         ]
         count = 0
         @manifest.fetch("field_mappings").each do |intent, mapping|
           mapping.fetch("request", []).each do |field|
             count += 1
             confidence = format("%.0f%%", field.fetch("confidence", 0.0) * 100)
-            lines << "| `#{intent}` | `#{field['role']}` | `#{Support.escape_markdown(field['target'])}` | #{field['location'] || 'body'} | `#{field['source_candidate'] || 'unmapped'}` | #{confidence} | #{field['requires_review'] ? 'yes' : 'no'} |"
+            lines << "| `#{intent}` | `#{field['role']}` | `#{Support.escape_markdown(field['target'])}` | #{field['location'] || 'body'} | `#{field['source_candidate'] || 'unmapped'}` | #{confidence} | `#{field['provenance'] || 'inferred'}` | #{field['requires_review'] ? 'yes' : 'no'} |"
           end
         end
         return "## Field mappings\n\nNo request field mappings were inferred." if count.zero?
@@ -125,14 +164,14 @@ module IntegrationGenerator
         lines = [
           "## Transformations and conditions",
           "",
-          "Amount: provider field `#{amount['provider_field'] || 'unknown'}`, unit `#{amount['provider_unit'] || 'unknown'}`, direction `#{amount['direction'] || 'none'}`, factor `#{amount['factor'].nil? ? 'review required' : amount['factor']}`."
+          "Amount: provider field `#{amount['provider_field'] || 'unknown'}`, unit `#{amount['provider_unit'] || 'unknown'}`, direction `#{amount['direction'] || 'none'}`, factor `#{amount['factor'].nil? ? 'review required' : amount['factor']}`, provenance `#{amount['provenance'] || 'inferred'}`."
         ]
         unless conditions.empty?
           lines << ""
-          lines << "Conditional requirements inferred from text (manual confirmation required):"
+          lines << "Conditional requirements (each rule carries its own provenance/review state in the manifest):"
           conditions.each do |condition|
             required_if = condition.fetch("required_if")
-            lines << "- `#{condition['field']}` when `#{required_if['field']} = #{required_if['equals']}`"
+            lines << "- `#{condition['field']}` when `#{required_if['field']} = #{required_if['equals']}` — `#{condition['provenance']}`, review: #{condition['requires_review'] ? 'yes' : 'no'}"
           end
         end
         lines.join("\n")
@@ -188,6 +227,7 @@ module IntegrationGenerator
             "- Operation: `#{data['operation_key']}`",
             "- Signature header: `#{signature['header'] || 'unknown'}`",
             "- Algorithm / encoding: `#{signature['algorithm'] || 'unknown'}` / `#{signature['encoding'] || 'unknown'}`",
+            "- Signature provenance: `#{signature['provenance'] || 'inferred'}`",
             "- Secret placeholder: `ENV[\"#{@manifest.dig('provider', 'slug').upcase}_WEBHOOK_SECRET\"]`",
             "- Event/status/id paths: `#{payload['event_path'] || 'unknown'}` / `#{payload['status_path'] || 'unknown'}` / `#{payload['provider_operation_id_path'] || 'unknown'}`",
             "",
@@ -205,16 +245,7 @@ module IntegrationGenerator
       end
 
       def manual_steps
-        lines = ["## Manual configuration, warnings and TODOs", ""]
-        warnings = @manifest["warnings"]
-        if warnings.empty?
-          lines << "No analyzer warnings were emitted. Host client/config integration still requires review."
-        else
-          warnings.each do |warning|
-            location = warning["location"] ? " (`#{warning['location']}`)" : ""
-            lines << "- **#{warning['code']}**#{location}: #{Support.escape_markdown(warning['message'])}"
-          end
-        end
+        lines = ["## Manual configuration and TODOs", ""]
         lines << "- **HOST_CONTRACT**: provide `provider_client.call(method:, url:, headers:, query:, body:)` and the host `Provider::BaseService`/operation model."
         lines << "- **SAFE_DEFAULTS**: request mappings marked for review and incompletely configured webhook verification fail closed. Use explicit inspection flags only outside production until an override is applied."
         lines.join("\n")

@@ -103,7 +103,54 @@ class CLITest < Minitest::Test
     assert_equal "example_transfer_api", manifest.dig("provider", "slug")
     assert_equal "detected", manifest.dig("capabilities", "create_payout", "status")
     assert_equal "missing", manifest.dig("capabilities", "webhook", "status")
+    assert_equal false, manifest.dig("overrides", "applied")
     assert_empty err.string
+  end
+
+  def test_analyze_applies_canonical_overrides_and_emits_final_manifest
+    out = StringIO.new
+    err = StringIO.new
+
+    status = IntegrationGenerator::CLI.start(
+      [
+        "analyze", "--spec", example_path("provider_api.yaml"), "--provider", "novapay",
+        "--overrides", example_path("novapay_overrides.yaml")
+      ],
+      out:,
+      err:
+    )
+    manifest = YAML.safe_load(out.string)
+
+    assert_equal 0, status
+    assert_equal true, manifest.dig("overrides", "applied")
+    assert_equal "hex", manifest.dig("webhook", "signature", "encoding")
+    assert_equal ["CALLBACK_SECRET_NOT_DECLARED"], manifest.fetch("warnings").map { |warning| warning["code"] }
+    assert_empty err.string
+  end
+
+  def test_analyze_reports_subject_specific_override_error
+    Tempfile.create(["invalid-overrides", ".yaml"]) do |file|
+      file.write(YAML.dump(
+        "override_version" => "1.0",
+        "source" => "test",
+        "reason" => "exercise strict validation",
+        "operations" => { "POST /does-not-exist" => { "intent" => "create_payout" } }
+      ))
+      file.flush
+      out = StringIO.new
+      err = StringIO.new
+
+      status = IntegrationGenerator::CLI.start(
+        ["analyze", "--spec", example_path("provider_api.yaml"), "--overrides", file.path],
+        out:,
+        err:
+      )
+
+      assert_equal 1, status
+      assert_includes err.string, "[OVERRIDE_UNKNOWN_OPERATION]"
+      assert_includes err.string, "POST /does-not-exist"
+      assert_empty out.string
+    end
   end
 
   def test_generate_writes_validated_artifacts_and_refuses_overwrite
@@ -158,6 +205,30 @@ class CLITest < Minitest::Test
       assert_equal 0, status
       assert File.file?(File.join(target, "alt_transfer_service.rb"))
       assert_equal "alt_transfer", YAML.safe_load(File.read(File.join(target, "integration_manifest.yml"))).dig("provider", "slug")
+      assert_empty err.string
+    end
+  end
+
+  def test_generate_with_overrides_persists_exact_final_manifest
+    Dir.mktmpdir("integration-generator-overrides-cli") do |directory|
+      target = File.join(directory, "novapay")
+      out = StringIO.new
+      err = StringIO.new
+
+      status = IntegrationGenerator::CLI.start(
+        [
+          "generate", "--spec", example_path("provider_api.yaml"), "--provider", "novapay",
+          "--overrides", example_path("novapay_overrides.yaml"), "--output", target
+        ],
+        out:,
+        err:
+      )
+      final_manifest = YAML.safe_load(File.read(File.join(target, "integration_manifest.yml")))
+
+      assert_equal 0, status
+      assert_equal true, final_manifest.dig("overrides", "applied")
+      assert_equal "hex", final_manifest.dig("webhook", "signature", "encoding")
+      assert File.file?(File.join(target, "novapay_service.rb"))
       assert_empty err.string
     end
   end

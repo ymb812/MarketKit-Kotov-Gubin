@@ -9,7 +9,9 @@ OpenAPI YAML/JSON
   -> validation + local $ref resolution
   -> provider-neutral Generic IR
   -> deterministic semantic analysis
-  -> reviewable Integration Manifest (YAML/JSON)
+  -> inferred Integration Manifest
+  -> validated generic overrides + provenance/audit
+  -> final Integration Manifest (YAML/JSON)
   -> Ruby service + integration docs + fixtures
 ```
 
@@ -37,11 +39,13 @@ bundle exec ruby bin/integrate --help
 bundle exec ruby bin/integrate inspect --spec examples/provider_api.yaml
 bundle exec ruby bin/integrate inspect --spec examples/alt_transfer_provider.json --format yaml
 bundle exec ruby bin/integrate analyze --spec examples/provider_api.yaml --provider novapay
+bundle exec ruby bin/integrate analyze --spec examples/provider_api.yaml --provider novapay --overrides examples/novapay_overrides.yaml
 bundle exec ruby bin/integrate analyze --spec examples/alt_transfer_provider.json --format json
 bundle exec ruby bin/integrate generate --spec examples/provider_api.yaml --provider novapay --output output/novapay
+bundle exec ruby bin/integrate generate --spec examples/provider_api.yaml --provider novapay --overrides examples/novapay_overrides.yaml --output output/novapay_overridden
 ```
 
-`inspect` по умолчанию выводит Generic IR как JSON. `analyze` по умолчанию выводит Integration Manifest как YAML. `generate` создаёт новый output-каталог с четырьмя проверенными артефактами:
+`inspect` по умолчанию выводит Generic IR как JSON. `analyze` по умолчанию выводит финальный Integration Manifest как YAML. Флаг `--overrides` применим к `analyze` и к `generate --spec`; с `generate --manifest` он намеренно несовместим, потому что prebuilt manifest уже считается финальным контрактом. `generate` создаёт новый output-каталог с четырьмя проверенными артефактами:
 
 ```text
 output/novapay/
@@ -90,6 +94,50 @@ bundle exec ruby bin/integrate generate --manifest output/checkpoint_novapay/int
 
 Generated service безопасно блокирует неподтверждённые mappings и неполную webhook verification. Параметры `allow_unreviewed: true` / `allow_unverified: true` предназначены только для явного inspection/demo, не для production.
 
+## Overrides: before / after
+
+Без override OpenAPI остаётся единственным источником структурных фактов. Анализатор уверенно находит endpoints, API key, amount в копейках и HMAC-SHA256, но честно помечает как review-required низкоуверенные host mappings, idempotency source, текстовые `required_if`, generic status synonyms и неизвестный webhook encoding:
+
+```powershell
+bundle exec ruby bin/integrate analyze --spec examples/provider_api.yaml --provider novapay --format yaml
+```
+
+Canonical data-only override подтверждает или уточняет только эти решения, не добавляя provider branches в Ruby-core:
+
+```powershell
+bundle exec ruby bin/integrate analyze `
+  --spec examples/provider_api.yaml `
+  --provider novapay `
+  --overrides examples/novapay_overrides.yaml `
+  --format yaml
+
+bundle exec ruby bin/integrate generate `
+  --spec examples/provider_api.yaml `
+  --provider novapay `
+  --overrides examples/novapay_overrides.yaml `
+  --output output/novapay_overridden
+```
+
+После override:
+
+- inferred: OpenAPI operations/contracts, auth, response/error shapes и остальные структурные факты;
+- overridden: operation intent confirmation, все пять status mappings, amount unit/direction/factor, необходимые request mapping sources, `required_if` и webhook `hmac_sha256/hex`;
+- unresolved: callback secret по-прежнему отсутствует в OpenAPI и должен прийти из `NOVAPAY_WEBHOOK_SECRET`; callback всё равно требует точный raw body и signature header.
+
+Финальный `integration_manifest.yml` хранит `overrides.applied_changes` с before/after, source/reason и `resolved_warnings`. Warning исчезает из unresolved-списка только по точному селектору `code + location`, связанному с реально применённым изменением; остальные warnings сохраняются.
+
+Override-файл имеет независимую версию `override_version: "1.0"`. Поддерживаемые sections:
+
+- `operations` — intent по точному ключу `METHOD /path`;
+- `status_mapping` — provider status → `approved`, `rejected`, `in_progress` или `unknown`;
+- `field_mappings` — явный `operation.*` host source и `confirm: true` для существующего provider field;
+- `transformations.amount` — provider unit, direction и положительный factor;
+- `transformations.conditional_requirements` — проверяемый `required_if` по существующим request fields;
+- `webhook.signature` — поддержанные algorithm/encoding;
+- `resolve_warnings` — точные warning selectors, сохраняемые в audit.
+
+Схема строгая: неизвестный ключ, operation, capability, field/status/warning или недопустимое значение завершают команду предметной ошибкой вида `[OVERRIDE_UNKNOWN_FIELD]` / `[OVERRIDE_INVALID_VALUE]`. `Idempotency-Key` становится подтверждённым только при явном host mapping, например `source: operation.idempotency_key`.
+
 Пример ошибки:
 
 ```text
@@ -120,6 +168,7 @@ Parser не присваивает операциям payout-intents и не с�
 - HTTP errors, отдельно schema/example provider codes;
 - webhook signature/payload/event candidates;
 - field mappings для create/fetch/cancel и amount/conditional transformations;
+- override provenance, applied changes и resolved warning audit;
 - missing/ambiguous/unsupported capabilities и machine-readable warnings.
 
 Порог classifier: confidence от `0.8` принимается автоматически, `0.5..0.79` требует review, ниже `0.5` операция остаётся unsupported. Это детерминированные эвристики, а не provider-specific код.
@@ -135,7 +184,9 @@ bin/integrate
   -> OpenAPI::Parser + SchemaParser
   -> IR::Document / Operation / Schema / Warning
   -> Analyzer rules
-  -> ProviderIR::Manifest
+  -> inferred ProviderIR::Manifest
+  -> Overrides::Loader + Overrides::Applier
+  -> final ProviderIR::Manifest
   -> Service / Documentation / Fixtures generators
   -> validated output bundle
 ```
@@ -148,10 +199,16 @@ manifest = IntegrationGenerator::Analyzer::ManifestBuilder.new(
   document,
   provider_slug: "novapay"
 ).build
-serializable_hash = manifest.to_h
+overrides = IntegrationGenerator::Overrides::Loader.load_file("examples/novapay_overrides.yaml")
+final_manifest = IntegrationGenerator::Overrides::Applier.new(
+  manifest,
+  overrides,
+  path: "examples/novapay_overrides.yaml"
+).apply
+serializable_hash = final_manifest.to_h
 ```
 
-`ProviderIR::Manifest` валидирует обязательные sections и ссылки capabilities на operations. Это единственный input для code/docs/fixtures generators; генераторы не читают OpenAPI или Generic IR. CLI поддерживает `generate --manifest`, чтобы эту границу можно было проверить отдельно.
+`ProviderIR::Manifest` валидирует обязательные sections, ссылки capabilities на operations и override audit. Только финальный manifest является input для code/docs/fixtures generators; генераторы не читают OpenAPI, Generic IR или override-файл. CLI поддерживает `generate --manifest`, чтобы эту границу можно было проверить отдельно.
 
 ## Поддерживаемое подмножество OpenAPI
 
@@ -166,7 +223,6 @@ Parser поддерживает OpenAPI 3.x YAML/JSON, local JSON Pointer refere
 - multi-type unions кроме `T | null`, а также `allOf`, `oneOf`, `anyOf`, `not`, discriminator и JSON Schema conditionals;
 - OpenAPI callbacks и top-level `webhooks` keyword;
 - исполнение OAuth/OpenID/mTLS авторизации;
-- generic overrides;
 - exact production `Provider::BaseService`, operation model и HTTP client contract — generated service предоставляет документированный adapter boundary.
 
 Unsupported schema/auth/callback constructs становятся warnings. Broken, external или cyclic `$ref` завершают parsing предметной ошибкой. Обычный `POST /webhooks/...` остаётся стандартной HTTP operation и уже извлекается.
@@ -184,6 +240,6 @@ bundle exec rake test
 - `examples/provider_api.yaml` — каноническая NovaPay OpenAPI 3.0.3 из материалов хакатона. Исходный файл: `provider_api (1).yaml`, SHA-256 `415F50EE36FB331DFAB49CEED0E8ED3B0EBE16053D7E00DBABD32282F4396551`.
 - `examples/alt_transfer_provider.json` — самостоятельная OpenAPI 3.1 fixture с другими endpoint/field names, Bearer auth, server variables и `application/problem+json`.
 
-## После чекпоинта
+## Следующий этап
 
-Ближайшее усиление core — generic overrides для подтверждения или исправления ambiguous intent/status/unit/signature facts без изменения Ruby-кода ядра. Web UI имеет смысл добавлять только поверх этого уже работающего pipeline как удобный demo/review layer.
+После полностью зелёного V3 следующий небольшой вертикальный этап — третья structurally different demo spec и `compatibility_report.md`. Web UI имеет смысл добавлять только поверх стабильного Ruby pipeline как отдельный review/visualization layer.

@@ -168,6 +168,54 @@ module IntegrationGenerator
         unless CAPABILITY_STATUSES.include?(webhook_status)
           raise ArgumentError, "Unknown webhook status #{webhook_status.inspect}"
         end
+
+        validate_overrides! if @attributes.key?("overrides")
+      end
+
+      def validate_overrides!
+        overrides = @attributes["overrides"]
+        ensure_type!(overrides, Hash, "overrides")
+        unless overrides["applied"] == true || overrides["applied"] == false
+          raise ArgumentError, "Manifest overrides.applied must be a boolean"
+        end
+        ensure_type!(overrides["applied_changes"], Array, "overrides.applied_changes")
+        ensure_type!(overrides["resolved_warnings"], Array, "overrides.resolved_warnings")
+        overrides["applied_changes"].each do |change|
+          ensure_type!(change, Hash, "override applied change")
+          %w[path source reason].each do |key|
+            value = change[key]
+            raise ArgumentError, "Manifest override change #{key} must be present" unless value.is_a?(String) && !value.empty?
+          end
+          unless change.key?("before") && change.key?("after")
+            raise ArgumentError, "Manifest override change must contain before and after"
+          end
+        end
+        overrides["resolved_warnings"].each do |entry|
+          ensure_type!(entry, Hash, "resolved warning")
+          ensure_type!(entry["warning"], Hash, "resolved warning.warning")
+          ensure_type!(entry["resolved_by"], Array, "resolved warning.resolved_by")
+          unless entry["resolved_by"].all? { |path| path.is_a?(String) && !path.empty? }
+            raise ArgumentError, "Manifest resolved warning paths must be non-empty strings"
+          end
+          %w[resolution source reason].each do |key|
+            value = entry[key]
+            raise ArgumentError, "Manifest resolved warning #{key} must be present" unless value.is_a?(String) && !value.empty?
+          end
+        end
+        unless overrides["applied"]
+          if overrides["applied_changes"].any? || overrides["resolved_warnings"].any?
+            raise ArgumentError, "Manifest unapplied overrides cannot contain audit entries"
+          end
+          return
+        end
+
+        %w[override_version source reason].each do |key|
+          value = overrides[key]
+          raise ArgumentError, "Manifest overrides.#{key} must be present" unless value.is_a?(String) && !value.empty?
+        end
+        unless overrides["override_version"] == "1.0"
+          raise ArgumentError, "Unsupported manifest override version #{overrides['override_version'].inspect}"
+        end
       end
 
       def manifest_operation_key(operation)

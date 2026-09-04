@@ -52,7 +52,9 @@ class ArtifactBundleTest < Minitest::Test
   end
 
   def test_bundle_can_be_built_from_serialized_manifest_without_openapi
-    manifest = manifest_for("provider_api.yaml", provider: "novapay")
+    inferred = manifest_for("provider_api.yaml", provider: "novapay")
+    overrides = IntegrationGenerator::Overrides::Loader.load_file(example_path("novapay_overrides.yaml"))
+    manifest = IntegrationGenerator::Overrides::Applier.new(inferred, overrides).apply
 
     Tempfile.create(["manifest", ".yml"]) do |file|
       file.write(YAML.dump(manifest.to_h))
@@ -65,6 +67,7 @@ class ArtifactBundleTest < Minitest::Test
 
       assert_includes artifacts.keys, "novapay_service.rb"
       assert_equal manifest.to_h, loaded.to_h
+      assert_equal "hex", loaded.to_h.dig("webhook", "signature", "encoding")
     end
   end
 

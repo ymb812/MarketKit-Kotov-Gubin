@@ -1,0 +1,74 @@
+override_version: "1.0"
+source: "HackGenesis organizer Q&A and explicit host operation mapping"
+reason: "Confirm NovaPay semantics that are ambiguous or absent in the canonical OpenAPI"
+
+operations:
+  "POST /payouts":
+    intent: create_payout
+
+status_mapping:
+  pending: in_progress
+  processing: in_progress
+  completed: approved
+  failed: rejected
+  cancelled: rejected
+
+field_mappings:
+  create_payout:
+    request:
+      - target: recipient
+        location: body
+        source: operation.payout_requisite
+        confirm: true
+      - target: recipient.phone
+        location: body
+        source: operation.payout_requisite.phone
+        confirm: true
+      - target: recipient.bank_code
+        location: body
+        source: operation.payout_requisite.bank_code
+        confirm: true
+      - target: recipient.bank_name
+        location: body
+        source: operation.payout_requisite.bank_name
+        confirm: true
+      - target: recipient.card_number
+        location: body
+        source: operation.payout_requisite.card_number
+        confirm: true
+      - target: Idempotency-Key
+        location: header
+        source: operation.idempotency_key
+        confirm: true
+
+transformations:
+  amount:
+    provider_unit: minor
+    direction: major_to_minor
+    factor: 100
+  conditional_requirements:
+    - field: recipient.bank_code
+      required_if:
+        field: recipient.type
+        equals: sbp
+    - field: recipient.card_number
+      required_if:
+        field: recipient.type
+        equals: card
+
+webhook:
+  signature:
+    algorithm: hmac_sha256
+    encoding: hex
+
+resolve_warnings:
+  - code: STATUS_MAPPING_DEFAULT_RULES_APPLIED
+    location: "#/status_mapping/mappings"
+  - code: WEBHOOK_SIGNATURE_ENCODING_UNKNOWN
+    location: "#/webhook/signature/encoding"
+  - code: IDEMPOTENCY_SOURCE_REQUIRES_REVIEW
+    location: "#/field_mappings/create_payout/request/Idempotency-Key"
+  - code: CONDITIONAL_REQUIREMENT_INFERRED
+    location: "#/transformations/conditional_requirements/recipient.bank_code"
+  - code: CONDITIONAL_REQUIREMENT_INFERRED
+    location: "#/transformations/conditional_requirements/recipient.card_number"

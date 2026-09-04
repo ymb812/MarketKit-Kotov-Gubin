@@ -48,7 +48,16 @@ module IntegrationGenerator
           "field_mappings" => fields["field_mappings"],
           "transformations" => fields["transformations"],
           "unsupported_operations" => resolution["unsupported_operations"],
-          "warnings" => warnings
+          "warnings" => warnings,
+          "overrides" => {
+            "applied" => false,
+            "override_version" => nil,
+            "file" => nil,
+            "source" => nil,
+            "reason" => nil,
+            "applied_changes" => [],
+            "resolved_warnings" => []
+          }
         )
       end
 

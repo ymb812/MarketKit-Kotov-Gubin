@@ -23,6 +23,7 @@ class GeneratedServiceContractTest < Minitest::Test
 
   def teardown
     ENV.delete("NOVAPAY_API_KEY")
+    ENV.delete("NOVAPAY_WEBHOOK_SECRET")
     remove_generated_service(:NovapayService)
   end
 
@@ -93,11 +94,90 @@ class GeneratedServiceContractTest < Minitest::Test
     assert_equal :manual_required, result[:signature_verification]
   end
 
+  def test_confirmed_canonical_conditional_rule_requires_bank_code_for_sbp
+    artifacts = canonical_artifacts(overridden: true)
+    source = artifacts.fetch("novapay_service.rb")
+    remove_generated_service(:NovapayService)
+    eval(source, TOPLEVEL_BINDING, "generated/novapay_service.rb") # rubocop:disable Security/Eval
+
+    service = Provider::NovapayService.new
+    operation = {
+      "amount" => 1500,
+      "currency" => "RUB",
+      "id" => "op_1",
+      "payout_requisite" => { "type" => "sbp", "phone" => "79001234567" }
+    }
+
+    errors = service.check_conditions(operation, :sbp)
+
+    assert_equal 1, errors.length
+    assert_equal "conditional_required_field_missing", errors.first.fetch(:code)
+    assert_equal "operation.payout_requisite.bank_code", errors.first.fetch(:field)
+  end
+
+  def test_overridden_service_needs_no_mapping_escape_hatch_and_verifies_hex_webhook
+    source = canonical_artifacts(overridden: true).fetch("novapay_service.rb")
+    remove_generated_service(:NovapayService)
+    eval(source, TOPLEVEL_BINDING, "generated/novapay_service.rb") # rubocop:disable Security/Eval
+    service = Provider::NovapayService.new
+    operation = {
+      "amount" => 1500,
+      "currency" => "RUB",
+      "id" => "op_1",
+      "idempotency_key" => "idem_1",
+      "payout_requisite" => {
+        "type" => "sbp",
+        "phone" => "79001234567",
+        "bank_code" => "044525225"
+      }
+    }
+
+    request = service.create_request(operation)
+
+    assert_equal "idem_1", request.dig(:headers, "Idempotency-Key")
+    assert_equal 150_000, request.dig(:body, "amount")
+
+    raw_body = JSON.generate(
+      "event" => "payout.completed",
+      "payout_id" => "np_1",
+      "external_id" => "op_1",
+      "status" => "completed"
+    )
+    ENV["NOVAPAY_WEBHOOK_SECRET"] = "callback-secret"
+    signature = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("NOVAPAY_WEBHOOK_SECRET"), raw_body)
+    result = service.process_callback(
+      raw_body,
+      headers: { "X-NovaPay-Signature" => signature },
+      raw_body: raw_body
+    )
+
+    assert_equal :verified, result[:signature_verification]
+    assert_equal :approved, result[:status]
+    assert_raises(ArgumentError) do
+      service.process_callback(raw_body, headers: { "X-NovaPay-Signature" => signature })
+    end
+    assert_raises(Provider::NovapayService::ProviderError) do
+      service.process_callback(raw_body, headers: {}, raw_body: raw_body)
+    end
+    ENV.delete("NOVAPAY_WEBHOOK_SECRET")
+    assert_raises(Provider::NovapayService::ConfigurationError) do
+      service.process_callback(
+        raw_body,
+        headers: { "X-NovaPay-Signature" => signature },
+        raw_body: raw_body
+      )
+    end
+  end
+
   private
 
-  def canonical_artifacts
+  def canonical_artifacts(overridden: false)
     document = IntegrationGenerator::OpenAPI::Parser.parse_file(example_path("provider_api.yaml"))
     manifest = IntegrationGenerator::Analyzer::ManifestBuilder.new(document, provider_slug: "novapay").build
+    if overridden
+      data = IntegrationGenerator::Overrides::Loader.load_file(example_path("novapay_overrides.yaml"))
+      manifest = IntegrationGenerator::Overrides::Applier.new(manifest, data).apply
+    end
     IntegrationGenerator::Generator::ArtifactBundle.new(manifest).render
   end
 
