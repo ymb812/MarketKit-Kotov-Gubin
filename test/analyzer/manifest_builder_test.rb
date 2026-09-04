@@ -100,6 +100,24 @@ class ManifestBuilderTest < Minitest::Test
     assert_equal first, second
   end
 
+  def test_builds_third_manifest_with_basic_auth_nested_responses_and_reviewable_fetch
+    manifest = build_manifest("alt_withdrawal_provider.yaml", provider: "alt_withdrawal")
+
+    assert_equal "detected", manifest.dig("capabilities", "create_payout", "status")
+    assert_equal "requires_review", manifest.dig("capabilities", "fetch_status", "status")
+    assert_equal "GET /withdrawals/{withdrawalId}", manifest.dig("capabilities", "fetch_status", "operation_key")
+    assert_equal "detected", manifest.dig("capabilities", "webhook", "status")
+    assert_equal "POST /notifications", manifest.dig("capabilities", "webhook", "operation_key")
+    assert_equal "basic", manifest.dig("auth", "schemes", 0, "scheme")
+    assert_equal "ALT_WITHDRAWAL_BASIC_AUTH", manifest.dig("auth", "schemes", 0, "config_env")
+    assert_equal "data.transaction.id", manifest.dig("field_mappings", "fetch_status", "response", 0, "source")
+    assert_equal "data.transaction.state", manifest.dig("field_mappings", "fetch_status", "response", 1, "source")
+    assert_nil manifest["operations"].find { |operation| operation["key"].start_with?("GET /withdrawals/") }["operation_id"]
+    assert_includes warning_codes(manifest), "AMBIGUOUS_CAPABILITY"
+    assert_includes warning_codes(manifest), "AMOUNT_UNIT_AMBIGUOUS"
+    assert_includes warning_codes(manifest), "WEBHOOK_SIGNATURE_ENCODING_UNKNOWN"
+  end
+
   private
 
   def build_manifest(file, provider:)

@@ -15,8 +15,9 @@ module IntegrationGenerator
       REQUEST_MAPPING_KEYS = %w[target location source confirm].freeze
       CONDITION_KEYS = %w[field required_if].freeze
       REQUIRED_IF_KEYS = %w[field equals].freeze
-      WEBHOOK_KEYS = %w[signature].freeze
-      SIGNATURE_KEYS = %w[algorithm encoding].freeze
+      WEBHOOK_KEYS = %w[signature payload].freeze
+      SIGNATURE_KEYS = %w[header algorithm encoding].freeze
+      PAYLOAD_KEYS = %w[event_path status_path provider_operation_id_path external_id_path error_path].freeze
       WARNING_KEYS = %w[code location].freeze
       MAPPABLE_CAPABILITIES = %w[create_payout fetch_status cancel_payout].freeze
       NORMALIZED_STATUSES = %w[approved rejected in_progress unknown].freeze
@@ -217,6 +218,7 @@ module IntegrationGenerator
         location = override["location"]
         mappings = @attributes.dig("field_mappings", capability, "request") || []
         mapping = mappings.find { |candidate| candidate["target"] == target && candidate["location"] == location }
+        mapping ||= add_schema_mapping(capability, target, location, mappings)
         unless mapping
           unknown!(
             "OVERRIDE_UNKNOWN_FIELD",
@@ -243,6 +245,25 @@ module IntegrationGenerator
         mapping["evidence"] = override_reason
         mark_overridden!(mapping)
         record_change!("#/field_mappings/#{capability}/request/#{target}", before, mapping.slice(*audit_keys))
+      end
+
+      def add_schema_mapping(capability, target, location, mappings)
+        return unless location == "body" && target.is_a?(String)
+
+        key = @attributes.dig("capabilities", capability, "operation_key")
+        operation = @attributes["operations"].find { |candidate| candidate["key"] == key }
+        _type, media = Analyzer::Support.json_content(operation&.dig("contract", "request_body", "content"))
+        entry = Analyzer::Support.schema_entries(media && media["schema"]).find { |path, _schema| path == target }
+        return unless entry && !target.include?("[]")
+
+        mapping = {
+          "role" => "explicit_field", "target" => target, "location" => location,
+          "source_candidate" => nil, "schema" => deep_copy(entry.last),
+          "required" => false, "requires_review" => true, "confidence" => 0.0,
+          "provenance" => "inferred"
+        }
+        mappings << mapping
+        mapping
       end
 
       def apply_amount!
@@ -343,17 +364,27 @@ module IntegrationGenerator
 
         section = expect_hash!(@overrides["webhook"], "webhook", "#/webhook")
         reject_unknown_keys!(section, WEBHOOK_KEYS, "#/webhook")
-        require_keys!(section, WEBHOOK_KEYS, "#/webhook")
-        signature_override = expect_hash!(section["signature"], "webhook signature", "#/webhook/signature")
-        reject_unknown_keys!(signature_override, SIGNATURE_KEYS, "#/webhook/signature")
-        invalid_value!("Webhook signature override cannot be empty", "#/webhook/signature") if signature_override.empty?
-
+        invalid_value!("Webhook override cannot be empty", "#/webhook") if section.empty?
         webhook = @attributes.fetch("webhook")
         unless webhook["status"] == "detected"
           unknown!("OVERRIDE_UNKNOWN_CAPABILITY", "Webhook capability is not detected", "#/webhook")
         end
+        apply_webhook_payload!(section["payload"]) if section.key?("payload")
+        return unless section.key?("signature")
+
+        signature_override = expect_hash!(section["signature"], "webhook signature", "#/webhook/signature")
+        reject_unknown_keys!(signature_override, SIGNATURE_KEYS, "#/webhook/signature")
+        invalid_value!("Webhook signature override cannot be empty", "#/webhook/signature") if signature_override.empty?
+
         signature = webhook["signature"]
-        unless signature.is_a?(Hash) && signature["header"]
+        if signature_override.key?("header")
+          operation = @attributes["operations"].find { |item| item["key"] == webhook["operation_key"] }
+          headers = operation.dig("contract", "parameters").select { |item| item["in"] == "header" }.map { |item| item["name"] }
+          unless headers.include?(signature_override["header"])
+            unknown!("OVERRIDE_UNKNOWN_FIELD", "Webhook header is not declared", "#/webhook/signature/header")
+          end
+        end
+        unless signature.is_a?(Hash) && (signature["header"] || signature_override["header"])
           unknown!("OVERRIDE_UNKNOWN_FIELD", "Webhook signature header is not available", "#/webhook/signature")
         end
 
@@ -372,6 +403,24 @@ module IntegrationGenerator
         signature["evidence"] = override_reason
         mark_overridden!(signature)
         record_change!("#/webhook/signature", before, signature)
+      end
+
+      def apply_webhook_payload!(override)
+        override = expect_hash!(override, "webhook payload", "#/webhook/payload")
+        reject_unknown_keys!(override, PAYLOAD_KEYS, "#/webhook/payload")
+        invalid_value!("Payload override cannot be empty", "#/webhook/payload") if override.empty?
+        webhook = @attributes.fetch("webhook")
+        operation = @attributes["operations"].find { |item| item["key"] == webhook["operation_key"] }
+        _type, media = Analyzer::Support.json_content(operation.dig("contract", "request_body", "content"))
+        paths = schema_paths(media && media["schema"])
+        override.each do |role, path|
+          unless paths.include?(path)
+            unknown!("OVERRIDE_UNKNOWN_FIELD", "Webhook payload path is not declared", "#/webhook/payload/#{role}")
+          end
+          before = webhook["payload"][role]
+          webhook["payload"][role] = path
+          record_change!("#/webhook/payload/#{role}", before, path)
+        end
       end
 
       def apply_warning_resolutions!
@@ -512,7 +561,12 @@ module IntegrationGenerator
           !@attributes.dig("webhook", "signature", "encoding").nil?
         when "WEBHOOK_SIGNATURE_ALGORITHM_UNKNOWN"
           !@attributes.dig("webhook", "signature", "algorithm").nil?
-        when "IDEMPOTENCY_SOURCE_REQUIRES_REVIEW", "REQUEST_PARAMETER_MAPPING_NOT_FOUND"
+        when "AMBIGUOUS_WEBHOOK_SIGNATURE_HEADER"
+          !@attributes.dig("webhook", "signature", "header").nil?
+        when "AMBIGUOUS_WEBHOOK_PAYLOAD_PATH"
+          !@attributes.dig("webhook", "payload", warning["location"].split("/").last).nil?
+        when "IDEMPOTENCY_SOURCE_REQUIRES_REVIEW", "REQUEST_PARAMETER_MAPPING_NOT_FOUND",
+             "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND"
           field_warning_resolved?(warning)
         when "CONDITIONAL_REQUIREMENT_INFERRED"
           field = warning["location"].to_s.split("/").last

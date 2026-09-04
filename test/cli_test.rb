@@ -166,8 +166,8 @@ class CLITest < Minitest::Test
       )
 
       assert_equal 0, status
-      assert_equal %w[INTEGRATION.md fixtures.json integration_manifest.yml novapay_service.rb], Dir.children(target).sort
-      assert_includes out.string, "Generated 4 artifacts"
+      assert_equal %w[INTEGRATION.md compatibility_report.md fixtures.json integration_manifest.yml novapay_service.rb], Dir.children(target).sort
+      assert_includes out.string, "Generated 5 artifacts"
       assert_empty err.string
       before = Dir.children(target).to_h { |name| [name, File.binread(File.join(target, name))] }
 
@@ -229,6 +229,7 @@ class CLITest < Minitest::Test
       assert_equal true, final_manifest.dig("overrides", "applied")
       assert_equal "hex", final_manifest.dig("webhook", "signature", "encoding")
       assert File.file?(File.join(target, "novapay_service.rb"))
+      assert File.file?(File.join(target, "compatibility_report.md"))
       assert_empty err.string
     end
   end

@@ -1,0 +1,104 @@
+{
+  "override_version": "1.0",
+  "source": "Example Withdrawal API integration review",
+  "reason": "Confirm provider semantics and explicit host operation mappings",
+  "operations": {
+    "GET /withdrawals/{withdrawalId}": {
+      "intent": "fetch_status"
+    }
+  },
+  "status_mapping": {
+    "NEW": "in_progress",
+    "SUCCESS": "approved",
+    "ERROR": "rejected"
+  },
+  "field_mappings": {
+    "create_payout": {
+      "request": [
+        {
+          "target": "beneficiary",
+          "location": "body",
+          "source": "operation.payout_requisite",
+          "confirm": true
+        },
+        {
+          "target": "beneficiary.iban",
+          "location": "body",
+          "source": "operation.payout_requisite.account",
+          "confirm": true
+        },
+        {
+          "target": "beneficiary.card_number",
+          "location": "body",
+          "source": "operation.payout_requisite.card_number",
+          "confirm": true
+        },
+        {
+          "target": "Idempotency-Token",
+          "location": "header",
+          "source": "operation.idempotency_key",
+          "confirm": true
+        }
+      ]
+    }
+  },
+  "transformations": {
+    "amount": {
+      "provider_unit": "major",
+      "direction": "none",
+      "factor": 1
+    },
+    "conditional_requirements": [
+      {
+        "field": "beneficiary.iban",
+        "required_if": {
+          "field": "beneficiary.type",
+          "equals": "iban"
+        }
+      },
+      {
+        "field": "beneficiary.card_number",
+        "required_if": {
+          "field": "beneficiary.type",
+          "equals": "card"
+        }
+      }
+    ]
+  },
+  "webhook": {
+    "signature": {
+      "algorithm": "hmac_sha256",
+      "encoding": "base64"
+    }
+  },
+  "resolve_warnings": [
+    {
+      "code": "STATUS_MAPPING_DEFAULT_RULES_APPLIED",
+      "location": "#/status_mapping/mappings"
+    },
+    {
+      "code": "AMOUNT_UNIT_AMBIGUOUS",
+      "location": "#/transformations/amount"
+    },
+    {
+      "code": "IDEMPOTENCY_SOURCE_REQUIRES_REVIEW",
+      "location": "#/field_mappings/create_payout/request/Idempotency-Token"
+    },
+    {
+      "code": "CONDITIONAL_REQUIREMENT_INFERRED",
+      "location": "#/transformations/conditional_requirements/beneficiary.iban"
+    },
+    {
+      "code": "CONDITIONAL_REQUIREMENT_INFERRED",
+      "location": "#/transformations/conditional_requirements/beneficiary.card_number"
+    },
+    {
+      "code": "WEBHOOK_SIGNATURE_ALGORITHM_UNKNOWN",
+      "location": "#/webhook/signature/algorithm"
+    },
+    {
+      "code": "WEBHOOK_SIGNATURE_ENCODING_UNKNOWN",
+      "location": "#/webhook/signature/encoding"
+    }
+  ]
+}

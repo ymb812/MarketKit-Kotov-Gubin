@@ -70,7 +70,7 @@ module IntegrationGenerator
       def title
         name = @manifest.dig("provider", "display_name") || @manifest.dig("provider", "slug")
         <<~MARKDOWN.chomp
-          # #{name} payout integration
+          # #{Support.escape_markdown(name)} payout integration
 
           Generated from Integration Manifest v#{@manifest['manifest_version']}. Review every warning and configuration placeholder before production use.
         MARKDOWN

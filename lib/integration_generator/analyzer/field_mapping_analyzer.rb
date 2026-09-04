@@ -63,7 +63,7 @@ module IntegrationGenerator
         [{
           "status" => capability["status"],
           "operation_key" => Support.operation_key(operation),
-          "request" => request_mappings(request_schema) + parameter_mappings(operation, warnings),
+          "request" => request_mappings(request_schema, warnings) + parameter_mappings(operation, warnings),
           "response" => response_mappings(operation)
         }, request_schema]
       end
@@ -112,9 +112,9 @@ module IntegrationGenerator
         }
       end
 
-      def request_mappings(schema)
+      def request_mappings(schema, warnings)
         required = required_paths(schema)
-        Support.schema_entries(schema).filter_map do |path, child|
+        mappings = Support.schema_entries(schema).filter_map do |path, child|
           rule = role_rule(path)
           next unless rule
 
@@ -132,6 +132,31 @@ module IntegrationGenerator
             "evidence" => "provider field name matches '#{path.split('.').last}'"
           }
         end
+
+        top_level_required = schema.is_a?(Hash) ? schema.fetch("required", []) : []
+        top_level_required.each do |name|
+          next if mappings.any? { |mapping| mapping["target"] == name }
+
+          child = schema.dig("properties", name)
+          warnings << Support.warning(
+            "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND",
+            "Required request body field '#{name}' needs an explicit host operation source",
+            location: "#/field_mappings/create_payout/request/#{name}"
+          )
+          mappings << {
+            "role" => "unmapped_required",
+            "target" => name,
+            "location" => "body",
+            "source_candidate" => nil,
+            "required" => true,
+            "schema" => Support.compact_schema(child),
+            "confidence" => 0.0,
+            "provenance" => "inferred",
+            "requires_review" => true,
+            "evidence" => "required provider field has no generic host mapping rule"
+          }
+        end
+        mappings
       end
 
       def parameter_mappings(operation, warnings)

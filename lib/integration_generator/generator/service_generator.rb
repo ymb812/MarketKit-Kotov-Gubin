@@ -48,6 +48,7 @@ module IntegrationGenerator
           end,
           "auth" => compact_auth,
           "field_mappings" => compact_field_mappings,
+          "request_schema" => create_request_schema,
           "transformations" => @manifest["transformations"],
           "status_mapping" => @manifest.dig("status_mapping", "mappings"),
           "errors" => @manifest["errors"].map do |error|
@@ -75,11 +76,17 @@ module IntegrationGenerator
         }
       end
 
+      def create_request_schema
+        operation = Support.operation_for(@manifest, "create_payout")
+        _type, media = Support.json_media(operation&.dig("contract", "request_body", "content"))
+        media && media["schema"]
+      end
+
       def compact_field_mappings
         @manifest["field_mappings"].transform_values do |mapping|
           {
             "request" => mapping.fetch("request", []).map do |field|
-              field.slice("role", "target", "location", "source_candidate", "required", "requires_review")
+              field.slice("role", "target", "location", "source_candidate", "required", "requires_review", "schema")
             end,
             "response" => mapping.fetch("response", []).map do |field|
               field.slice("role", "source", "http_status")
@@ -121,8 +128,10 @@ module IntegrationGenerator
         __ADAPTER_CONFIG__
             JSON
 
-            STATUS_MAP = ADAPTER_CONFIG.fetch("status_mapping").transform_values do |mapping|
-              mapping.fetch("normalized").to_sym
+            STATUS_MAP = ADAPTER_CONFIG.fetch("status_mapping").each_with_object({}) do |(provider_status, mapping), result|
+              next if mapping["requires_review"] || mapping["provenance"] == "default_rule"
+
+              result[provider_status] = mapping.fetch("normalized").to_sym
             end.freeze
 
             attr_writer :provider_client
@@ -182,11 +191,15 @@ module IntegrationGenerator
               body = parse_body(payload)
               webhook = ADAPTER_CONFIG.fetch("webhook")
               verification = verify_webhook_signature(webhook, headers, raw_body)
+              body = parse_body(raw_body) if verification == :verified
               if verification == :manual_required && !allow_unverified
                 raise ConfigurationError,
                       "Webhook verification is not fully configured; review the manifest or pass allow_unverified: true only for inspection"
               end
               paths = webhook.fetch("payload")
+              if !allow_unverified && (!paths["status_path"] || !paths["provider_operation_id_path"])
+                raise ConfigurationError, "Webhook status/id mapping is missing or ambiguous; review the manifest"
+              end
               provider_status = read_payload_path(body, paths["status_path"])
 
               {
@@ -226,6 +239,9 @@ module IntegrationGenerator
 
               body = {}
               mappings_for(intent).sort_by { |mapping| mapping["target"].to_s.count(".") }.each do |mapping|
+                if mapping["target"].to_s.include?("[]")
+                  raise ConfigurationError, "Array element mappings require a reviewed whole-array source"
+                end
                 location = mapping["location"] || "body"
                 if mapping["requires_review"] && !allow_unreviewed
                   raise ConfigurationError,
@@ -244,6 +260,7 @@ module IntegrationGenerator
                 value = read_operation_path(operation, source)
                 next if value.nil?
                 value = transform_value(mapping, value)
+                value = project_to_provider_schema(value, mapping["schema"]) if location == "body"
 
                 case location
                 when "body"
@@ -254,6 +271,7 @@ module IntegrationGenerator
                   request[:query][mapping.fetch("target")] = value
                 end
               end
+              validate_required_body!(body, ADAPTER_CONFIG["request_schema"]) if intent == "create_payout"
               request[:body] = body unless body.empty?
               apply_auth(request, definition.fetch("key"))
               request
@@ -525,7 +543,11 @@ module IntegrationGenerator
                 break nil if current.nil?
 
                 if current.is_a?(Hash)
-                  current[segment] || current[segment.to_sym]
+                  if current.key?(segment)
+                    current[segment]
+                  elsif current.key?(segment.to_sym)
+                    current[segment.to_sym]
+                  end
                 elsif current.respond_to?(segment)
                   current.public_send(segment)
                 end
@@ -544,12 +566,89 @@ module IntegrationGenerator
 
             def normalize_value(value)
               case value
+              when nil
+                nil
               when Hash
                 value.each_with_object({}) { |(key, child), result| result[key.to_s] = normalize_value(child) }
               when Array
                 value.map { |child| normalize_value(child) }
               else
                 value.respond_to?(:to_h) ? normalize_value(value.to_h) : value
+              end
+            end
+
+            def project_to_provider_schema(value, schema)
+              normalized = normalize_value(value)
+              return nil if normalized.nil? && schema.is_a?(Hash) && schema["nullable"]
+              unless schema.is_a?(Hash)
+                return normalized unless normalized.is_a?(Hash) || normalized.is_a?(Array)
+
+                raise ConfigurationError, "Composite request mapping has no provider schema boundary"
+              end
+
+              case schema["kind"]
+              when "object"
+                unless normalized.is_a?(Hash)
+                  raise ConfigurationError, "Provider object field received #{normalized.class}"
+                end
+
+                properties = schema.fetch("properties", {})
+                additional = schema["additional_properties"]
+                if properties.empty? && additional.nil?
+                  raise ConfigurationError, "Provider object schema does not declare a safe projection boundary"
+                end
+
+                result = properties.each_with_object({}) do |(name, child_schema), projected|
+                  next unless normalized.key?(name)
+
+                  projected[name] = project_to_provider_schema(normalized[name], child_schema)
+                end
+                normalized.each do |name, child|
+                  next if properties.key?(name) || additional == false || additional.nil?
+
+                  result[name] = additional == true ? child : project_to_provider_schema(child, additional)
+                end
+                result
+              when "array"
+                unless normalized.is_a?(Array)
+                  raise ConfigurationError, "Provider array field received #{normalized.class}"
+                end
+                unless schema["items"].is_a?(Hash)
+                  raise ConfigurationError, "Provider array schema does not declare item boundaries"
+                end
+
+                normalized.map { |item| project_to_provider_schema(item, schema["items"]) }
+              when "unknown"
+                if normalized.is_a?(Hash) || normalized.is_a?(Array)
+                  raise ConfigurationError, "Composite request mapping has an unknown provider schema boundary"
+                end
+                normalized
+              else
+                if normalized.is_a?(Hash) || normalized.is_a?(Array)
+                  raise ConfigurationError, "Provider scalar field received a composite value"
+                end
+                normalized
+              end
+            end
+
+            def validate_required_body!(value, schema, path = "body")
+              return unless schema.is_a?(Hash)
+
+              if schema["kind"] == "object" && value.is_a?(Hash)
+                schema.fetch("required", []).each do |name|
+                  unless value.key?(name)
+                    raise ArgumentError, "Required provider field #{path}.#{name} is missing"
+                  end
+                end
+                schema.fetch("properties", {}).each do |name, child|
+                  validate_required_body!(value[name], child, "#{path}.#{name}") if value.key?(name)
+                end
+              elsif schema["kind"] == "array" && value.is_a?(Array)
+                value.each_with_index do |item, index|
+                  validate_required_body!(item, schema["items"], "#{path}[#{index}]")
+                end
+              elsif value.nil? && !schema["nullable"]
+                raise ArgumentError, "Provider field #{path} cannot be null"
               end
             end
 
@@ -576,7 +675,10 @@ module IntegrationGenerator
             end
 
             def fetch_value(hash, key)
-              hash[key] || hash[key.to_s]
+              return hash[key] if hash.key?(key)
+              return hash[key.to_s] if hash.key?(key.to_s)
+
+              nil
             end
 
             def header_value(headers, name)

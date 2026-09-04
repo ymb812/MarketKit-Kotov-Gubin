@@ -1,0 +1,197 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "rbconfig"
+require "stringio"
+require "tmpdir"
+require "yaml"
+
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+
+require "integration_generator"
+
+# A repeatable, presentation-oriented wrapper around the public CLI. It keeps
+# demo-only provider choices here so the generic application remains unaware of
+# its examples.
+module HackGenesisDemo
+  class OutputExistsError < StandardError; end
+
+  ARTIFACTS = %w[
+    INTEGRATION.md
+    compatibility_report.md
+    fixtures.json
+    integration_manifest.yml
+  ].freeze
+
+  SCENARIOS = [
+    {
+      name: "novapay",
+      spec: "provider_api.yaml",
+      provider: "novapay",
+      overrides: "novapay_overrides.yaml"
+    },
+    {
+      name: "alt_transfer",
+      spec: "alt_transfer_provider.json",
+      provider: "alt_transfer"
+    },
+    {
+      name: "alt_withdrawal",
+      spec: "alt_withdrawal_provider.yaml",
+      provider: "alt_withdrawal",
+      overrides: "alt_withdrawal_overrides.json"
+    }
+  ].freeze
+
+  class << self
+    def start(argv, out: $stdout, err: $stderr, root: project_root)
+      options = parse_options(argv, out:)
+      return 0 if options == :help
+
+      run_root = prepare_run_root(options[:output], root)
+      out.puts "HackGenesis demo: #{run_root}"
+      show_withdrawal_review(out:, root:)
+
+      SCENARIOS.each do |scenario|
+        generate_scenario(scenario, run_root:, out:, err:, root:)
+      end
+
+      out.puts "\nDemo complete. Open these generated bundles:"
+      SCENARIOS.each { |scenario| out.puts "- #{File.join(run_root, scenario[:name])}" }
+      0
+    rescue OptionParser::ParseError => error
+      err.puts "[DEMO_USAGE] #{error.message}"
+      2
+    rescue OutputExistsError => error
+      err.puts "[DEMO_OUTPUT_EXISTS] #{error.message}"
+      2
+    rescue StandardError => error
+      err.puts "[DEMO_FAILED] #{error.message}"
+      1
+    end
+
+    private
+
+    def parse_options(argv, out:)
+      options = {}
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: bundle exec ruby bin/demo [--output NEW_DIR]"
+        opts.on("--output DIR", "New demo root; an existing path is rejected") { |value| options[:output] = value }
+        opts.on("-h", "--help", "Show this help") do
+          out.puts opts
+          return :help
+        end
+      end
+      parser.parse!(argv)
+      raise OptionParser::InvalidOption, argv.join(" ") unless argv.empty?
+
+      options
+    end
+
+    def prepare_run_root(requested_output, root)
+      if requested_output
+        target = File.expand_path(requested_output)
+        raise OutputExistsError, "#{target} already exists" if File.exist?(target)
+
+        FileUtils.mkdir_p(File.dirname(target))
+        Dir.mkdir(target)
+        return target
+      end
+
+      output_root = File.join(root, "output")
+      FileUtils.mkdir_p(output_root)
+      Dir.mktmpdir("demo-", output_root)
+    end
+
+    def show_withdrawal_review(out:, root:)
+      before = analyze_manifest("alt_withdrawal_provider.yaml", "alt_withdrawal", root:)
+      after = analyze_manifest(
+        "alt_withdrawal_provider.yaml",
+        "alt_withdrawal",
+        overrides: "alt_withdrawal_overrides.json",
+        root:
+      )
+      out.puts(
+        "Review point — alt_withdrawal fetch_status: " \
+        "#{before.dig('capabilities', 'fetch_status', 'status')} -> " \
+        "#{after.dig('capabilities', 'fetch_status', 'status')} after validated override"
+      )
+    end
+
+    def generate_scenario(scenario, run_root:, out:, err:, root:)
+      target = File.join(run_root, scenario.fetch(:name))
+      arguments = [
+        "generate", "--spec", example_path(scenario.fetch(:spec), root),
+        "--provider", scenario.fetch(:provider)
+      ]
+      if scenario[:overrides]
+        arguments += ["--overrides", example_path(scenario[:overrides], root)]
+      end
+      arguments += ["--output", target]
+
+      run_cli!(arguments, err:)
+      manifest = YAML.safe_load(File.read(File.join(target, "integration_manifest.yml")))
+      service = Dir.children(target).find { |name| name.end_with?("_service.rb") }
+      verify_service!(File.join(target, service))
+      verify_artifacts!(target, service)
+
+      detected = manifest.fetch("capabilities").count { |_name, row| row["status"] == "detected" }
+      auth = manifest.dig("auth", "schemes", 0) || {}
+      overall = IntegrationGenerator::Generator::CompatibilityGenerator.new(manifest).overall_status.tr("_", " ").upcase
+      out.puts(
+        "#{scenario[:name]}: #{detected}/5 capabilities detected; " \
+        "auth=#{auth_label(auth)}; overall=#{overall}; ruby -c OK"
+      )
+    end
+
+    def analyze_manifest(spec, provider, overrides: nil, root:)
+      arguments = ["analyze", "--spec", example_path(spec, root), "--provider", provider, "--format", "json"]
+      arguments += ["--overrides", example_path(overrides, root)] if overrides
+      output = StringIO.new
+      errors = StringIO.new
+      status = IntegrationGenerator::CLI.start(arguments, out: output, err: errors)
+      raise "CLI analyze failed: #{errors.string.strip}" unless status.zero?
+
+      JSON.parse(output.string)
+    end
+
+    def run_cli!(arguments, err:)
+      output = StringIO.new
+      errors = StringIO.new
+      status = IntegrationGenerator::CLI.start(arguments, out: output, err: errors)
+      return if status.zero?
+
+      err.puts errors.string unless errors.string.empty?
+      raise "CLI generate failed with status #{status}"
+    end
+
+    def verify_artifacts!(target, service)
+      expected = ARTIFACTS + [service]
+      actual = Dir.children(target).sort
+      raise "Unexpected artifacts in #{target}: #{actual.join(', ')}" unless actual == expected.sort
+    end
+
+    def verify_service!(path)
+      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-c", path)
+      raise "ruby -c failed for #{path}: #{stderr.strip}" unless status.success?
+    end
+
+    def auth_label(auth)
+      [auth["type"], auth["scheme"]].compact.join("/")
+    end
+
+    def example_path(name, root)
+      File.join(root, "examples", name)
+    end
+
+    def project_root
+      File.expand_path("..", __dir__)
+    end
+  end
+end
+
+exit HackGenesisDemo.start(ARGV) if $PROGRAM_NAME == __FILE__

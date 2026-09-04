@@ -95,12 +95,12 @@ module IntegrationGenerator
         path.to_s.split(".").reduce(value) do |current, segment|
           break nil unless current.is_a?(Hash)
 
-          current[segment] || current[segment.to_sym]
+          current.key?(segment) ? current[segment] : current[segment.to_sym]
         end
       end
 
       def escape_markdown(value)
-        value.to_s.gsub("|", "\\|").gsub(/\r?\n/, " ")
+        value.to_s.gsub(/\r?\n/, " ").gsub("`", "'").gsub("|", "\\|")
       end
 
       def deep_copy(value)

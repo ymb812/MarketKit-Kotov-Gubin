@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: Example Withdrawal API
+  version: "2026-09"
+  description: Example payout-oriented API with withdrawal terminology.
+servers:
+  - url: https://api.withdrawals.example/v1
+security:
+  - BasicAuth: []
+paths:
+  /withdrawals:
+    post:
+      operationId: submitWithdrawal
+      tags: [Withdrawals]
+      summary: Submit a withdrawal
+      parameters:
+        - name: Idempotency-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Unique request token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequest'
+            example:
+              amount: 42.50
+              asset: EUR
+              beneficiary:
+                type: iban
+                iban: DE89370400440532013000
+      responses:
+        '202':
+          description: Withdrawal accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalEnvelope'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /withdrawals/{withdrawalId}:
+    parameters:
+      - name: withdrawalId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Withdrawal details
+      responses:
+        '200':
+          description: Withdrawal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalEnvelope'
+    delete:
+      operationId: voidWithdrawal
+      tags: [Withdrawals]
+      summary: Void withdrawal
+      responses:
+        '200':
+          description: Withdrawal voided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalEnvelope'
+  /notifications:
+    post:
+      operationId: receiveDelivery
+      tags: [Notifications]
+      summary: Delivery notification
+      description: A delivery from the provider about a withdrawal event.
+      security: []
+      parameters:
+        - name: X-Callback-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationEnvelope'
+      responses:
+        '204':
+          description: Notification accepted
+  /wallet/balance:
+    get:
+      operationId: currentFunds
+      tags: [Wallet]
+      summary: Current wallet funds
+      responses:
+        '200':
+          description: Available wallet funds
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available_funds, asset]
+                properties:
+                  available_funds:
+                    type: number
+                    example: 901.25
+                  asset:
+                    type: string
+                    example: EUR
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Provider API username and password.
+  schemas:
+    WithdrawalRequest:
+      type: object
+      required: [amount, asset, beneficiary]
+      properties:
+        amount:
+          type: number
+          description: Decimal amount in provider currency.
+          example: 42.50
+        asset:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: EUR
+        beneficiary:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [iban, card]
+            iban:
+              type: string
+              description: required when type = iban
+            card_number:
+              type: string
+              description: required when type = card
+    WithdrawalEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [transaction]
+          properties:
+            transaction:
+              type: object
+              required: [id, state]
+              properties:
+                id:
+                  type: string
+                  example: wd_123
+                state:
+                  type: string
+                  enum: [NEW, SUCCESS, ERROR]
+            reference:
+              type: string
+              example: merchant_42
+    NotificationEnvelope:
+      type: object
+      required: [event_type, data]
+      properties:
+        event_type:
+          type: string
+          enum: [withdrawal.NEW, withdrawal.SUCCESS, withdrawal.ERROR]
+        data:
+          type: object
+          required: [transaction]
+          properties:
+            transaction:
+              type: object
+              required: [id, state]
+              properties:
+                id:
+                  type: string
+                state:
+                  type: string
+                  enum: [NEW, SUCCESS, ERROR]
+            reference:
+              type: string
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [invalid_beneficiary, insufficient_funds]
+        message:
+          type: string

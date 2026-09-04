@@ -175,7 +175,7 @@ module IntegrationGenerator
 
           if mapping["role"] == "status"
             status = @manifest.dig("status_mapping", "mappings", value.to_s)
-            next if status.nil? || status["normalized"] == "unknown"
+            next if status.nil? || status["normalized"] == "unknown" || status["requires_review"] || status["provenance"] == "default_rule"
 
             result["normalized_status"] = {
               "path" => mapping["source"],
@@ -213,7 +213,7 @@ module IntegrationGenerator
             "header" => @manifest.dig("webhook", "signature", "header"),
             "algorithm" => @manifest.dig("webhook", "signature", "algorithm"),
             "encoding" => @manifest.dig("webhook", "signature", "encoding"),
-            "verification" => @manifest.dig("webhook", "signature", "encoding") ? "configured" : "manual_required"
+            "verification" => webhook_verification_configured? ? "configured" : "manual_required"
           }
         }
       end
@@ -221,7 +221,8 @@ module IntegrationGenerator
       def expected_callback(body)
         payload = @manifest.dig("webhook", "payload") || {}
         provider_status = Support.dig_path(body, payload["status_path"])
-        normalized = @manifest.dig("status_mapping", "mappings", provider_status.to_s, "normalized")
+        status = @manifest.dig("status_mapping", "mappings", provider_status.to_s)
+        normalized = status["normalized"] if status && !status["requires_review"] && status["provenance"] != "default_rule"
         {
           "event" => Support.dig_path(body, payload["event_path"]),
           "provider_operation_id" => Support.dig_path(body, payload["provider_operation_id_path"]),
@@ -234,6 +235,11 @@ module IntegrationGenerator
 
       def operation_identity(operation)
         operation.slice("key", "operation_id", "method", "path")
+      end
+
+      def webhook_verification_configured?
+        signature = @manifest.dig("webhook", "signature") || {}
+        signature["header"] && signature["algorithm"] == "hmac_sha256" && %w[hex base64].include?(signature["encoding"])
       end
     end
   end

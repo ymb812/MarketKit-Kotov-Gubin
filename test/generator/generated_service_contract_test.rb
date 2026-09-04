@@ -59,7 +59,7 @@ class GeneratedServiceContractTest < Minitest::Test
     assert_equal "79001234567", request.dig(:body, "recipient", "phone")
     assert_equal true, result[:success]
     assert_equal "np_1", result[:provider_operation_id]
-    assert_equal :in_progress, result[:status]
+    assert_equal :unknown, result[:status], "Default status synonyms need review before runtime use"
   end
 
   def test_fetch_status_interpolates_provider_operation_id
@@ -74,7 +74,7 @@ class GeneratedServiceContractTest < Minitest::Test
 
     assert_equal :get, client.requests.first[:method]
     assert_equal "https://api.sandbox.novapay.example/v1/payouts/np%2F1%20%3F", client.requests.first[:url]
-    assert_equal :approved, result[:status]
+    assert_equal :unknown, result[:status], "Unreviewed status must remain unknown"
   end
 
   def test_callback_is_mapped_but_does_not_claim_unknown_signature_encoding
@@ -90,7 +90,7 @@ class GeneratedServiceContractTest < Minitest::Test
     result = service.process_callback(payload, allow_unverified: true)
 
     assert_equal "np_1", result[:provider_operation_id]
-    assert_equal :approved, result[:status]
+    assert_equal :unknown, result[:status], "Inspection does not confirm status semantics"
     assert_equal :manual_required, result[:signature_verification]
   end
 

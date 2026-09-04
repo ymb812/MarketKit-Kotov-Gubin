@@ -35,6 +35,7 @@ module IntegrationGenerator
                 "normalized" => normalized,
                 "confidence" => 0.9,
                 "provenance" => "default_rule",
+                "requires_review" => true,
                 "evidence" => "known status synonym"
               }
             else

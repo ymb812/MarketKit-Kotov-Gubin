@@ -55,7 +55,7 @@ module IntegrationGenerator
         if candidates.length > 1
           warnings << Support.warning(
             "AMBIGUOUS_WEBHOOK_SIGNATURE_HEADER",
-            "Multiple signature-like webhook headers were found; the first candidate requires review",
+            "Multiple signature-like webhook headers were found; select a declared header with an override",
             location: "#/webhook/signature/header"
           )
         end
@@ -88,7 +88,7 @@ module IntegrationGenerator
         )
 
         {
-          "header" => parameter&.fetch("name", nil),
+          "header" => candidates.length == 1 ? parameter.fetch("name") : nil,
           "algorithm" => algorithm,
           "encoding" => encoding,
           "confidence" => parameter && algorithm ? 0.9 : (parameter ? 0.6 : 0.0),
@@ -148,9 +148,10 @@ module IntegrationGenerator
           if matches.length > 1
             warnings << Support.warning(
               "AMBIGUOUS_WEBHOOK_PAYLOAD_PATH",
-              "Multiple webhook payload paths match role '#{role}'; the first candidate requires review",
+              "Multiple webhook payload paths match role '#{role}'; select a declared path with an override",
               location: "#/webhook/payload/#{role.tr(' ', '_')}_path"
             )
+            return nil
           end
           return matches.first.first
         end

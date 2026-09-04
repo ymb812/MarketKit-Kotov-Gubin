@@ -12,7 +12,7 @@ module IntegrationGenerator
       Commands:
         inspect    Parse OpenAPI 3.x and print normalized Generic IR
         analyze    Build a reviewable payout Integration Manifest
-        generate   Generate Ruby service, docs, fixtures and exact manifest
+        generate   Generate service, docs, fixtures, compatibility report and exact manifest
 
       Run 'integrate COMMAND --help' for command options.
     HELP

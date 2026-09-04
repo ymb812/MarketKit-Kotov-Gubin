@@ -17,6 +17,7 @@ module IntegrationGenerator
         artifacts = {
           service.filename => service.render,
           "INTEGRATION.md" => DocumentationGenerator.new(manifest).render,
+          "compatibility_report.md" => CompatibilityGenerator.new(manifest).render,
           "fixtures.json" => "#{JSON.pretty_generate(FixturesGenerator.new(manifest).to_h)}\n",
           "integration_manifest.yml" => YAML.dump(manifest.to_h)
         }
@@ -38,6 +39,9 @@ module IntegrationGenerator
         )
         ProviderIR::Manifest.new(loaded_manifest)
         raise Error.new("GENERATION_INVALID", "Generated INTEGRATION.md is empty") if artifacts.fetch("INTEGRATION.md").strip.empty?
+        if artifacts.fetch("compatibility_report.md").strip.empty?
+          raise Error.new("GENERATION_INVALID", "Generated compatibility_report.md is empty")
+        end
       rescue JSON::ParserError, Psych::Exception, ArgumentError, KeyError, NoMethodError, TypeError, SyntaxError => e
         raise Error.new("GENERATION_INVALID", e.message)
       end
