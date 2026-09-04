@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 module IntegrationGenerator
   module OpenAPI
     class Parser
@@ -10,12 +12,18 @@ module IntegrationGenerator
 
       class << self
         def parse_file(path)
-          new(Loader.load_file(path)).parse
+          document = Loader.load_file(path)
+          source = {
+            "path" => path.to_s.tr("\\", "/"),
+            "sha256" => Digest::SHA256.file(path).hexdigest
+          }
+          new(document, source: source).parse
         end
       end
 
-      def initialize(document)
+      def initialize(document, source: nil)
         @document = document
+        @source = source
         @warnings = []
       end
 
@@ -36,7 +44,8 @@ module IntegrationGenerator
           security_schemes: security_schemes,
           schemas: parse_component_schemas(resolved.dig("components", "schemas")),
           operations: parse_operations(resolved.fetch("paths")),
-          warnings: @warnings
+          warnings: @warnings,
+          source: @source
         )
       end
 
