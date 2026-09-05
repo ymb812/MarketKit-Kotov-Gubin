@@ -17,6 +17,18 @@ OpenAPI YAML/JSON
 
 Runtime не использует LLM или внешние API. Полный pipeline уже генерирует обязательные артефакты из manifest.
 
+## Как проверять репозиторий
+
+| Задача | Куда перейти |
+|---|---|
+| Быстро запустить проект и получить результат | раздел «Установка и первый полный запуск» ниже |
+| Проверить каждый критерий по коду и тестам | [JURY_GUIDE.md](JURY_GUIDE.md) |
+| Разобраться в слоях, связях и точках расширения | [MODULE_MAP.md](MODULE_MAP.md) |
+| Провести live demo через локальный UI | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
+| Посмотреть исправления R1–R10 и условия прогонов | [REVIEW_REPORT.md](REVIEW_REPORT.md) |
+
+`JURY_GUIDE.md` — основная точка входа для оценки: там есть короткий reproducible flow, все 16 экспертных подкритериев, технический crosswalk, точные ссылки на реализацию/тесты и границы заявленного результата.
+
 ## Требования
 
 - Ruby 3.1 или новее;
@@ -31,14 +43,33 @@ bundle --version
 
 Если Ruby установлен, но не добавлен в `PATH`, можно вызвать `ruby` и `bundle` по абсолютным путям либо временно расширить `PATH` только для текущего терминала.
 
-## Установка и запуск
+## Установка и первый полный запуск
 
 Команды выполняются из корня репозитория. На Windows Ruby может искажать кириллицу в пути скрипта; точки запуска используют существующий путь к проекту и UTF-8 `Dir.pwd` как резерв. При запуске из каталога с кириллицей сначала перейдите в корень проекта. Переименование папки в ASCII остаётся обходным вариантом для старой версии кода, но `-Ilib` само по себе не устраняет эту проблему.
 
 Канонический `examples/provider_api.yaml` должен сохранять LF: правило находится в `.gitattributes`. Оно важно при `core.autocrlf=true`, поскольку manifest хранит SHA-256 исходных байтов. При несовпадении хэша проверьте `git ls-files --eol examples/provider_api.yaml` и локальные изменения; не заменяйте ожидаемый хэш в тесте. Правило должно входить в передаваемый репозиторий, а не оставаться только локальным файлом.
 
-```bash
+```powershell
 bundle install
+bundle exec ruby bin/demo
+```
+
+`bin/demo` создаёт уникальный каталог в `output/`, проводит canonical, transfer и withdrawal specs через публичный CLI, показывает review transition, генерирует три bundle и запускает `ruby -c` для каждого service. Внутри каждого provider-каталога находятся пять файлов:
+
+```text
+output/demo-<id>/novapay/
+  novapay_service.rb
+  INTEGRATION.md
+  compatibility_report.md
+  fixtures.json
+  integration_manifest.yml
+```
+
+Canonical bundle после override сохраняет `NEEDS REVIEW` из-за callback secret: это ручная ENV-настройка, которой нет в OpenAPI, а не скрытая ошибка генерации. Ожидаемые 5/2/5 capabilities и порядок чтения файлов описаны в [JURY_GUIDE.md](JURY_GUIDE.md).
+
+## Отдельные команды CLI
+
+```bash
 bundle exec ruby bin/integrate --help
 bundle exec ruby bin/integrate inspect --spec examples/provider_api.yaml
 bundle exec ruby bin/integrate inspect --spec examples/alt_transfer_provider.json --format yaml
@@ -51,18 +82,7 @@ bundle exec ruby bin/integrate generate --spec examples/provider_api.yaml --prov
 bundle exec ruby bin/integrate generate --spec examples/alt_withdrawal_provider.yaml --provider alt_withdrawal --overrides examples/alt_withdrawal_overrides.json --output output/alt_withdrawal
 ```
 
-`inspect` по умолчанию выводит Generic IR как JSON. `analyze` по умолчанию выводит финальный Integration Manifest как YAML. Флаг `--overrides` применим к `analyze` и к `generate --spec`; с `generate --manifest` он намеренно несовместим, потому что prebuilt manifest уже считается финальным контрактом. `generate` создаёт новый output-каталог с пятью проверенными артефактами:
-
-```text
-output/novapay/
-  novapay_service.rb
-  INTEGRATION.md
-  compatibility_report.md
-  fixtures.json
-  integration_manifest.yml
-```
-
-Существующий output-каталог намеренно не перезаписывается: команда завершится с `[OUTPUT_EXISTS]`. Выберите новый путь либо осознанно удалите старый generated-каталог.
+`inspect` по умолчанию выводит Generic IR как JSON. `analyze` по умолчанию выводит финальный Integration Manifest как YAML. Флаг `--overrides` применим к `analyze` и к `generate --spec`; с `generate --manifest` он намеренно несовместим, потому что prebuilt manifest уже считается финальным контрактом. Существующий output-каталог намеренно не перезаписывается: команда завершится с `[OUTPUT_EXISTS]`. Выберите новый путь либо осознанно удалите старый generated-каталог.
 
 ## Payout Studio — локальный frontend
 
@@ -253,7 +273,9 @@ Parser не присваивает операциям payout-intents и не с�
 
 Порог classifier: confidence от `0.8` принимается автоматически, `0.5..0.79` требует review, ниже `0.5` операция остаётся unsupported. Это детерминированные эвристики, а не provider-specific код.
 
-## Архитектура
+## Архитектура и карта модулей
+
+Подробная карта ответственности, входов/выходов, разрешённых зависимостей, тестов и extension recipes находится в [MODULE_MAP.md](MODULE_MAP.md). Критичный инвариант: generators получают только final Integration Manifest и не читают исходный OpenAPI.
 
 ```text
 bin/integrate
@@ -327,6 +349,6 @@ node --test test/web/frontend_test.js
 - `examples/alt_transfer_provider.json` — самостоятельная OpenAPI 3.1 fixture с другими endpoint/field names, Bearer auth, server variables и `application/problem+json`.
 - `examples/alt_withdrawal_provider.yaml` — самостоятельная OpenAPI 3.0.3 fixture с withdrawal terminology, Basic auth, nested response/webhook payloads, endpoint без `operationId` и conditional beneficiary fields. `examples/alt_withdrawal_overrides.json` демонстрирует тот же generic override contract в JSON.
 
-## Следующий этап
+## Статус
 
-Ревью перед третьим чекпоинтом завершено: [REVIEW_REPORT.md](REVIEW_REPORT.md), [матрица критериев](CRITERIA_MATRIX.md). Финальная suite — 123 tests / 749 assertions; три demo bundles и Windows root launch проверены. Следующий этап по [плану](CHECKPOINT_3_PLAN.md) — документация для жюри и карта модулей, затем сильный текст по всем подкритериям. Видео, синхронизация и deck отложены. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция остаются в backlog.
+Ревью и этап документации для жюри завершены: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [REVIEW_REPORT.md](REVIEW_REPORT.md), [матрица критериев](CRITERIA_MATRIX.md). Финальная suite core — 123 tests / 749 assertions; три demo bundles, manifest-only byte match и Windows root launch проверены. Следующий этап по [плану](CHECKPOINT_3_PLAN.md) — сильный связный текст по всем подкритериям. Видео, синхронизация и deck отложены. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция остаются в backlog.
