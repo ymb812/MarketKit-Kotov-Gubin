@@ -61,7 +61,7 @@ bundle exec ruby bin/demo
 
 ## Границы обещаний
 
-Уточнение после review 2026-09-05: `process_callback(payload)` принимает parsed Hash и возвращает `signature_verification: :host_required` — аутентификация остаётся хосту. Для показа HMAC открывайте `process_verified_callback(raw_body, headers:)`. Актуальные проверки: 123 tests/749 assertions, три bundles и ASCII/Unicode Windows HTTP flow — [REVIEW_REPORT.md](REVIEW_REPORT.md). Сценарий ниже/выше сохранён как исходный материал; тайминг и видео отложены по текущему плану.
+Уточнение после review 2026-09-05: `process_callback(payload)` принимает parsed Hash и возвращает `signature_verification: :host_required` — аутентификация остаётся хосту. Для показа HMAC открывайте `process_verified_callback(raw_body, headers:)`. Актуальные проверки: 123 tests/749 assertions, три bundles и ASCII/Unicode Windows HTTP flow; воспроизводимые команды и границы собраны в [JURY_GUIDE.md](JURY_GUIDE.md). Тайминг и видео остаются задачей отдельной репетиции.
 
 Поддерживается заявленный в README subset OpenAPI 3.x с local refs. Не заявляем весь OpenAPI/JSON Schema, remote refs, OAuth runtime, OpenAPI callbacks keyword, production certification или точное совпадение с недоступным production host. Обычный webhook POST поддержан. Generated RSpec-файл пока не создаётся; runtime contract tests самого проекта есть. Полный JSON Schema validator в generated runtime не реализован.
 

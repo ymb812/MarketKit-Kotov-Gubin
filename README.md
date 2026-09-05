@@ -24,8 +24,8 @@ Runtime не использует LLM или внешние API. Полный pi
 | Быстро запустить проект и получить результат | раздел «Установка и первый полный запуск» ниже |
 | Проверить каждый критерий по коду и тестам | [JURY_GUIDE.md](JURY_GUIDE.md) |
 | Разобраться в слоях, связях и точках расширения | [MODULE_MAP.md](MODULE_MAP.md) |
+| Взять готовый связный текст третьего чекпоинта | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
 | Провести live demo через локальный UI | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
-| Посмотреть исправления R1–R10 и условия прогонов | [REVIEW_REPORT.md](REVIEW_REPORT.md) |
 
 `JURY_GUIDE.md` — основная точка входа для оценки: там есть короткий reproducible flow, все 16 экспертных подкритериев, технический crosswalk, точные ссылки на реализацию/тесты и границы заявленного результата.
 
@@ -94,7 +94,7 @@ bundle exec ruby bin/serve
 
 UI работает поверх того же Ruby pipeline; JavaScript только отображает manifest и отправляет локальные запросы. WEBrick устанавливается через `bundle install`; Node.js, сборка frontend, CDN и внешние API не нужны. Сервер слушает только `127.0.0.1`; это однопользовательский локальный инструмент, не публичный hosted service.
 
-Подробный сценарий: [DEMO_GUIDE.md](DEMO_GUIDE.md). Основа будущей презентации: [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md). Оба документа входят в Git.
+Подробный сценарий: [DEMO_GUIDE.md](DEMO_GUIDE.md). Готовый текст третьего чекпоинта и отдельно помеченный будущий storyboard: [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md). Оба документа входят в Git.
 
 Короткий сценарий показа:
 
@@ -351,4 +351,4 @@ node --test test/web/frontend_test.js
 
 ## Статус
 
-Ревью и этап документации для жюри завершены: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [REVIEW_REPORT.md](REVIEW_REPORT.md), [матрица критериев](CRITERIA_MATRIX.md). Финальная suite core — 123 tests / 749 assertions; три demo bundles, manifest-only byte match и Windows root launch проверены. Следующий этап по [плану](CHECKPOINT_3_PLAN.md) — сильный связный текст по всем подкритериям. Видео, синхронизация и deck отложены. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция остаются в backlog.
+Матрица, ревью, документация и связный текст третьего чекпоинта завершены. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 123 tests / 749 assertions; три demo bundles, manifest-only byte match и Windows root launch проверены. Видео, синхронизация, deck и репетиция в фактическом presentation browser остаются отдельным следующим этапом. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.

@@ -1,93 +1,198 @@
-# Payout Studio — содержание финальной презентации
+# Payout Studio — текст третьего чекпоинта
 
-Это основа для deck, без визуального оформления. Актуально на 5 сентября 2026. Передать вместе с [DEMO_GUIDE.md](DEMO_GUIDE.md) и [README.md](README.md). Главная логика: требование → реализация → проверяемое доказательство.
+Это единый актуальный источник содержательного текста для третьего чекпоинта. Он рассчитан на устное выступление или письменное описание без заданного тайминга. Короткий сценарий показа находится в [DEMO_GUIDE.md](DEMO_GUIDE.md), проверяемые ссылки на код и тесты — в [JURY_GUIDE.md](JURY_GUIDE.md). Будущий storyboard финальной презентации отделён в конце и не подменяет этот текст.
 
-Веса сверены с локальным оригиналом `описание (1).docx`: разбор API — 20; сервис — 25; преобразования — 15; универсальность — 15; понятность/документация — 15; качество реализации — 10. Это веса, не заявленные полученные баллы. Отраслевой блок: дополнительные возможности — 6, выступление — 6, полнота — 8. В оригинальной технической таблице группы суммируются в 103, хотя строка «Итого» указывает 100; самостоятельно нормализовать её нельзя. `qa_сессия.txt` и `вступление.txt` также сверены: точный лимит и слот конкретной команды в них не указаны.
+Веса из задания используются только для полноты покрытия: разбор API — 20, generated service — 25, преобразования — 15, универсальность — 15, понятность и документация — 15, качество реализации — 10. Это не наша самооценка. Техническая таблица в локальных версиях задания содержит арифметическое расхождение 100/103, поэтому мы не пересчитываем и не нормализуем её самостоятельно.
 
-## Слайд 1. Проблема интегратора
+## Основной текст
 
-- **Мысль:** разнородный API нужно перевести в доменный payout-контракт, а не просто получить HTTP-клиент.
-- **Показать:** OpenAPI слева; request/auth/status/amount/webhook задачи справа. Число 2–5 дней пометить «по условию кейса», если подтверждено оригиналом.
-- **Сказать:** «Спецификация описывает провайдера, а приложению нужен единый контракт выплаты. Мы автоматизируем извлечение и подготовку адаптера, оставляя неоднозначные решения проверяемыми».
-- **Критерий:** понимание кейса и полнота постановки.
-- **Evidence:** canonical `examples/provider_api.yaml`; различия входных полей и host-модели в generated mappings. Не использовать неподтверждённый ROI.
+Сложность этого кейса не в том, чтобы отправить ещё один HTTP POST. OpenAPI уже описывает транспорт: endpoint, поля, схему ответа. Но приложению Space Payments нужен другой уровень — единый payout-контракт, в котором сумма, статусы, идентификаторы, ошибки и callbacks ведут себя предсказуемо независимо от конкретного провайдера.
 
-## Слайд 2. Вход и конкретный результат
+Мы сделали автономный Ruby-инструмент, который принимает OpenAPI 3.x в YAML или JSON и создаёт заготовку provider adapter. На выходе не один сгенерированный файл, а согласованный пакет: Ruby service, инструкция интегратору, fixtures, финальный Integration Manifest и compatibility report. Все пять файлов строятся из одного final manifest. Runtime не использует LLM, внешние API или проприетарный сервис.
 
-- **Мысль:** из YAML/JSON создаются пять реальных integration artifacts.
-- **Показать:** входной файл и список `<provider>_service.rb`, `INTEGRATION.md`, `fixtures.json`, `integration_manifest.yml`, `compatibility_report.md`.
-- **Сказать:** «Ruby-сервис содержит request, auth, response и callback логику. Документация, примеры и отчёт создаются из того же manifest».
-- **Критерий:** генерация сервиса — 25; понятность/документация — 15.
-- **Evidence:** экран «Артефакты», скачанный пакет; `generator/artifact_bundle.rb` и четыре generators. Не обещать generated RSpec: его нет.
+Главное решение проекта — не генерировать Ruby напрямую из YAML. Между ними есть два явных контракта. Сначала parser переводит OpenAPI в provider-neutral Generic IR. Затем детерминированные analyzers строят inferred Integration Manifest: назначают операциям payout-intents, находят auth, status values, errors, webhook и field mappings. Если вывод нельзя подтвердить структурой спецификации, он остаётся предложением с confidence и evidence. Интегратор может принять или исправить его общим YAML/JSON override. После этого final manifest становится единственным входом для generators.
 
-## Слайд 3. Pipeline и точка ответственности человека
+Такой pipeline даёт человеку нормальную точку контроля. Мы не предлагаем поверить генератору на слово и не прячем сомнение за «успешной» генерацией. В manifest видно, что пришло из OpenAPI, что предложили правила, что подтвердил override и какие вопросы остались нерешёнными.
 
-- **Мысль:** структурное извлечение отделено от семантических решений и генерации.
-- **Показать:** `OpenAPI → Parser/Normalizer → Generic IR → Semantic analysis → Manifest → Review/overrides → Generators → Validation`.
-- **Сказать:** «Правила детерминированы. Evidence объясняет выбор. Overrides подтверждают отдельные решения и сохраняют источник, причину и audit. Генераторы читают final manifest».
-- **Критерий:** разбор API — 20; качество — 10.
-- **Evidence:** `openapi/`, `ir/`, `analyzer/`, `overrides/applier.rb`; CLI `generate --manifest`. UI отображает backend readiness и не вычисляет новую семантику.
+## Разбор API — E1.1–E1.3
 
-## Слайд 4. Live demo: от OpenAPI до Ruby
+### Методы, параметры, запросы и ответы — E1.1
 
-- **Мысль:** показать рабочую цепочку, а не серию статичных скриншотов.
-- **Показать:** canonical input → capabilities/evidence → override 6→1 warnings → manifest/audit → ×100/status/required_if → генерация → `create_request` и `process_callback` → скачивание.
-- **Сказать:** «Не все значения следует угадывать. Здесь подтверждаем семантику, видим изменения и получаем исполняемый адаптер. Оставшийся secret задаётся при подключении».
-- **Критерий:** сервис — 25; преобразования — 15; UX — 15.
-- **Evidence:** пошаговый [DEMO_GUIDE.md](DEMO_GUIDE.md), методы настоящего generated service, полный audit, скачанный архив. NEEDS REVIEW не скрывать ради зелёной картинки.
+Parser читает servers, paths, HTTP methods, `operationId`, tags, summary и description. Для каждой операции он сохраняет path/query/header parameters, request body, response variants, headers, examples, required fields и вложенные object/array schemas. Local `$ref` раскрываются до semantic analysis; path-level и operation-level parameters объединяются по правилам OpenAPI, причём operation-level значение имеет приоритет.
 
-## Слайд 5. Универсальность проверена на различающихся входах
+Это существенно шире списка endpoints. Generic IR содержит request/response contract, из которого позже можно вывести field mappings, fixtures и runtime normalization. Если рядом встречается конструкция вне заявленного subset, parser не должен делать вид, что понял её: unsupported schema/auth/callback elements становятся warnings, а broken, external или cyclic refs завершают разбор предметной ошибкой.
 
-- **Мысль:** один pipeline обрабатывает разные структуры; неизвестное не превращается в выдуманную поддержку.
-- **Показать:** таблицу ниже и live withdrawal before/after.
-- **Сказать:** «Это canonical кейс и две наши самостоятельные test fixtures. Они меняют не только название провайдера, но auth, endpoints, поля, вложенность и неоднозначности».
-- **Критерий:** универсальность — 15.
-- **Evidence:** `examples/` и три generated bundles из `bin/demo`; альтернативные contract tests.
+Canonical parser tests используют официальный `examples/provider_api.yaml` напрямую. Отдельные tests проверяют JSON-вход, OpenAPI 3.1 nullable union, constraints, parameter precedence, chained refs и отрицательные случаи. Граница здесь честная: весь OpenAPI и JSON Schema мы не заявляем. Advanced composition, remote refs, callbacks objects и полная transport-сериализация `style/explode` остаются вне текущего subset.
 
-| Вход | Различия | Наблюдаемый результат |
+### Авторизация, статусы и ошибки — E1.2
+
+Auth analyzer распознаёт API key, Bearer и Basic, сохраняет root- и operation-level security requirements и различает OR-варианты от AND-наборов. Для credentials формируются ENV placeholders. Если у операции два обязательных ключа одного типа, они получают разные имена; если security допускает несколько альтернатив, runtime выбирает первую полностью настроенную поддержанную группу, а не просто первую запись.
+
+Status analyzer ищет lifecycle values в успешных responses и callback payload. Error responses не становятся статусами выплаты. Общие синонимы вроде `completed` или `failed` сохраняются как reviewable предложение, а не как подтверждённая семантика провайдера. До override generated runtime возвращает `unknown`. Для canonical кейса mapping из задания подтверждён явно: pending/processing → in_progress, completed → approved, failed/cancelled → rejected. Значение `accepted`, которого нет в найденной таблице, остаётся unknown.
+
+Error analyzer сохраняет HTTP status, code/message paths, headers и examples. Codes из schema enum и из examples не смешиваются. Вложенные ответы поддерживаются, `Retry-After` не теряется. При обработке фактического ответа действует порядок exact status → range → default; это отдельно проверено на HTTP 400, 401, 402, 422, 429 и 500, malformed JSON и разных error shapes.
+
+### Webhook и дополнительные условия — E1.3
+
+Обычный `POST /webhooks/...` распознаётся как входящая операция. Analyzer ищет signature header, algorithm и encoding, а также event/status/id/error paths в payload. Из request contract извлекаются idempotency header и условные требования к полям.
+
+Здесь особенно легко получить опасную ложную уверенность, поэтому неоднозначность блокирует автоматический выбор. Два signature-like headers, несколько payout id paths или текстовое условие без подтверждённого host source остаются warning. Override может выбрать только header или schema path, который действительно объявлен в контракте. OpenAPI callbacks и top-level `webhooks` keyword пока диагностируются как unsupported; стандартный webhook POST поддерживается.
+
+## Generated service — E2.1–E2.3
+
+### Формирование и отправка запросов — E2.1
+
+Service generator создаёт класс вида `Provider::<Name>Service < Provider::BaseService`. Публичный контракт включает `check_conditions`, `create_request`, `create_payout`, `fetch_status`, `cancel_payout`, `fetch_balance` и обработку callback. Наличие метода в шаблоне не означает выдуманную capability: вызов разрешён только для detected operation из final manifest.
+
+Внутри service запрос собирается в два шага. `build_request` формирует method, URL, headers, query и body. `dispatch` передаёт их абстрактному `provider_client.call(method:, url:, headers:, query:, body:)`. Это соответствует уточнению Q&A: реальная сеть для решения не требуется, а transport предоставляет host-приложение. Provider operation id возвращается в нормализованном ответе; сохраняет его тоже host.
+
+Generated runtime подставляет и URL-encode-ит path parameters, применяет подтверждённые host→provider mappings, добавляет idempotency и auth. Request behavior исполняется в contract tests с fake client, а не проверяется поиском строк в сгенерированном Ruby.
+
+### Ответы, статусы и ошибки — E2.2
+
+`normalize_response` выбирает response mapping по фактическому HTTP status. Это важно для API, где `204` описан раньше `201` или разные 2xx responses возвращают разные schemas: первый успешный ответ больше не считается универсальным. Exact response имеет приоритет над range даже при пустом body.
+
+Успешный результат содержит provider operation id, исходный provider status, normalized status, HTTP status и raw body. Ошибка содержит HTTP status, provider code/message, `retry_after` и raw body. Raw сохраняется намеренно: интегратору нужен материал для диагностики неизвестной формы ответа.
+
+В задании HTTP 402 связан с `insufficient_balance` и действием `retry later`. Generated adapter извлекает этот факт, но не отправляет выплату повторно сам. Retry, временная блокировка провайдера, alert и persistence — бизнес-политика host-приложения. Мы считаем эту границу правильнее автоматического поведения, которого нет в OpenAPI.
+
+### Callback и подключение — E2.3
+
+Base URL приходит из `servers` и может быть переопределён через ENV. Credentials также читаются из ENV; реальные secrets не попадают в manifest, fixtures или generated source.
+
+После нового Q&A callback-контракт разделён на два честных входа. `process_callback(payload)` принимает уже разобранный Hash, делает mapping и возвращает `signature_verification: :host_required`. Этот метод не заявляет, что parsed JSON аутентифицирован: проверка должна произойти на HTTP-границе host-приложения до применения результата.
+
+Когда интеграция передаёт исходные байты, используется `process_verified_callback(raw_body, headers:)`. Он проверяет HMAC-SHA256 в hex или base64, сравнивает подпись без раннего выхода и затем разбирает именно подписанное тело. Повторная сериализация Hash для восстановления raw body запрещена, потому что она может изменить байты. Tests покрывают корректную и повреждённую подпись, missing secret/header, неизвестный encoding, ambiguous mappings и nested callback payload.
+
+## Преобразования данных — E3.1–E3.2
+
+### Сопоставление полей и статусов — E3.1
+
+Field mapping хранит не только пары имён. Для каждого поля известны host source, provider target, location, schema, confidence, evidence, provenance и необходимость review. Отдельные mappings существуют для create, fetch и cancel. Response id/status paths привязаны к конкретным HTTP response variants.
+
+Если lexical rule не может отличить `merchant_id` от `payout_id`, общий параметр не получает автоматически роль provider operation id. Несколько payout-like candidates тоже требуют review. После явного override mapping попадает в audit с before/after, source и reason.
+
+Composite host object перед отправкой проецируется на provider schema. Это не косметическая операция: внутренние поля host-модели не должны утечь во внешний payout request. Именованные properties разрешены, `additionalProperties` учитывается явно, а object без известной границы блокируется. Направление readOnly/writeOnly также сохраняется: readOnly response field не требуется во входящем request, writeOnly request field не используется как response status.
+
+Status mapping исполняется только после подтверждения. Неизвестное runtime value остаётся `unknown`; event webhook возвращается отдельно и не подменяет payload status. Если конкретный провайдер задаёт другую event/status policy, её нужно подтвердить как часть host/provider contract.
+
+### Форматы и обязательность — E3.2
+
+Для денег analyzer отличает явно описанные копейки/центы от расплывчатого `minor units`. Canonical override задаёт major→minor и factor 100. Runtime использует точную Rational arithmetic: `10.25` превращается в 1025, а значение, которое даёт дробную minor unit, завершается понятной ошибкой вместо округления.
+
+Required fields проверяются после всех mappings и composite projection. Это позволяет отличить отсутствующий key от explicit nullable `nil` и не потерять `false`. Подтверждённый `required_if` выполняется в service: например, `bank_code` становится обязательным только для нужного recipient type. Whole-array projection работает при известной items schema; per-item host mappings вроде `items[].field` пока не поддержаны.
+
+Parser сохраняет enum, format, pattern, min/max и nullable, но мы не называем это полным runtime JSON Schema validator. Исполняются те constraints и transformations, для которых в generated adapter есть явный контракт и тест.
+
+## Универсальность — E4.1–E4.3
+
+### Разные структуры API — E4.1
+
+Универсальность проверяется не копиями NovaPay с заменённым названием. `bin/demo` проводит через один pipeline три входа.
+
+Canonical NovaPay — YAML/OpenAPI 3.0.3, API key, payout endpoints, top-level id/status и HMAC hex. Alternative transfer — JSON/OpenAPI 3.1, Bearer, `/transfers`, другие fields, server variables и только create/fetch capabilities. Cancel, webhook и balance там не создаются. Alternative withdrawal — YAML, Basic, withdrawal terminology, nested `data.transaction.*`, base64 webhook, conditional beneficiary fields и status endpoint без `operationId`. Generic JSON override переводит этот endpoint из `requires_review` в detected.
+
+Наблюдаемый результат — 5/2/5 detected capabilities. Transfer-вариант полезен именно тем, что остаётся неполным: generator не маскирует отсутствие метода stub-реализацией. Withdrawal проверяет совместную работу других auth, nesting, naming и review path. Обе альтернативы — наши structural fixtures, а не заявления о production-интеграции с публичными провайдерами.
+
+### Отсутствие provider-specific core — E4.2
+
+NovaPay-specific semantics находятся в canonical OpenAPI и data-only override. Parser не назначает payout intent; generators не читают OpenAPI. Можно взять сохранённый final manifest, выполнить `generate --manifest` без spec/override и получить те же пять файлов побайтово. В финальной проверке различий SHA-256 не было.
+
+Это более сильная граница, чем отсутствие строки `novapay` в `lib/`, хотя такой scan тоже проходит. Manifest-only test специально делает parser недоступным и всё равно строит bundle. Alternative runtime tests затем проверяют, что за архитектурой действительно стоит другое поведение, а не один универсальный NovaPay-шаблон.
+
+### Новые правила и unsupported elements — E4.3
+
+Semantic rules разделены по предмету: operation classification, auth, statuses, errors, webhook и fields. Новое правило для существующей capability добавляется в профильный analyzer и обязано вернуть evidence и безопасное состояние review. Provider ambiguity можно закрыть versioned YAML/JSON override без ветки по имени провайдера.
+
+Неизвестные операции сохраняются в `unsupported_operations`; missing и ambiguous capabilities видны в manifest, report и fixtures. Добавление новой доменной capability потребует согласованного изменения нескольких слоёв, потому что пять payout slots сейчас фиксированы. Это осознанная граница, а не plugin API, которого пока нет. Конкретный маршрут изменения parser, rules, overrides, capabilities и artifacts описан в `MODULE_MAP.md`.
+
+## Использование и документация — E5.1–E5.3
+
+### Последовательный запуск — E5.1
+
+Основной CLI имеет три команды: `inspect` печатает Generic IR, `analyze` — inferred или reviewed manifest, `generate` — полный bundle. Для проверки всего результата одной командой есть `bundle exec ruby bin/demo`: он создаёт новый уникальный output root, прогоняет три providers и запускает `ruby -c` перед публикацией каждого service.
+
+Локальный Payout Studio работает поверх того же Ruby pipeline. Пользователь видит исходную spec, capabilities и evidence, применяет override, сравнивает inferred/final manifest, открывает mappings/auth/errors и скачивает отдельный файл или `.tar.gz`. JavaScript отвечает за представление, а не за semantic decisions. Node.js, frontend build, CDN и внешний runtime API не нужны.
+
+Windows-проблемы проверялись отдельно. Проект запускается из корня по пути с кириллицей и пробелами; canonical YAML сохраняет LF и исходный SHA при `core.autocrlf=true`. В ASCII- и Unicode-копиях прошли root launch, demo и реальная HTTP generation/download. Мы не включаем в это утверждение чистую установку Ruby с пустым gem cache и вызов Unicode-скрипта из постороннего cwd.
+
+### Инструкция интегратору и fixtures — E5.2
+
+Generated `INTEGRATION.md` содержит source/servers, review provenance, capabilities, per-operation auth, field mappings, transformations, statuses, error contract, callback policy и manual steps. Там явно указано, какие ENV нужны и какой client contract должен предоставить host.
+
+`fixtures.json` предпочитает реальные examples из OpenAPI. Если example отсутствует, значение строится по schema и получает provenance `schema_generated`; такой fixture не выдаётся за подтверждённый бизнес-сценарий. В canonical bundle есть create/fetch/cancel/webhook/balance, ожидаемые provider id/status mappings и callback `host_required`. Transfer bundle содержит только доступные operations и отдельно перечисляет unavailable fixtures.
+
+Generated инструкция пока на английском. Отдельный generated RSpec отсутствует: fixtures и contract tests проекта не выдаются за него.
+
+### Понятный результат и ошибки — E5.3
+
+Ошибки имеют code, message и location. CLI пишет результат в stdout, ошибки — в stderr и возвращает различимые exit codes. Invalid spec, override или manifest не превращаются в stack trace без контекста.
+
+Compatibility report использует три состояния: READY, NEEDS REVIEW и UNSUPPORTED. Мы намеренно не выводим синтетический процент готовности: точность такого числа невозможно обосновать. Resolved warnings сохраняются в audit, а unresolved warning содержит следующее действие. Поэтому canonical report после полного override всё ещё показывает NEEDS REVIEW для webhook secret. Это корректный результат: secret не должен находиться в OpenAPI.
+
+## Качество реализации — E6.1–E6.2
+
+### Разделение компонентов — E6.1
+
+Ruby-код разделён на `openapi`, `ir`, `analyzer`, `provider_ir`, `overrides`, `generator` и `web`. Это не просто структура папок. Между слоями есть проверяемые контракты: analyzer читает Generic IR; overrides меняют manifest; generators читают final manifest; `ArtifactBundle` создаёт содержимое; `OutputWriter` публикует его.
+
+Один manifest питает service, docs, fixtures и report, поэтому они не расходятся из-за четырёх независимых интерпретаций YAML. Source SHA, evidence и override audit позволяют восстановить происхождение решения. Большие `Overrides::Applier` и inline service template мы оставляем видимым техническим долгом. Переписывать их перед показом без подтверждённой проблемы было бы рискованнее, чем документировать стоимость расширения и держать contract tests.
+
+Основная логика и backend написаны на Ruby. Web UI — тонкий слой над тем же pipeline; LLM и proprietary dependencies в runtime нет.
+
+### Ошибки и безопасная публикация — E6.2
+
+Validation идёт на нескольких границах. Loader безопасно читает YAML/JSON, document validator проверяет OpenAPI 3.x, ref resolver ловит broken/external/cyclic refs, manifest проверяет required sections, object shapes, capability links и auth requirements. Artifact bundle компилирует Ruby в памяти и повторно читает generated JSON/YAML.
+
+Output writer не записывает результат прямо в целевой каталог. Он создаёт lock и staging directory, проверяет безопасные filenames, записывает все файлы, запускает внешний `ruby -c` и только после успеха переименовывает staging в final output. Существующий target не перезаписывается. Tests проверяют, что при invalid filename, syntax error или malformed manifest частичный результат не публикуется.
+
+Полная semantic validation любого вручную изменённого manifest и полное context-aware Markdown escaping остаются в backlog. Эти ограничения не влияют на проверенный путь через generated final manifest, но мы не выдаём bounded validator за универсальный.
+
+## Что усиливает решение для платёжного домена
+
+Дополнительная ценность здесь не в количестве экранов. Она в четырёх поведениях, которые обычно приходится проверять вручную.
+
+Первое — источник idempotency key. Header не считается готовым только потому, что найден в OpenAPI: нужен явный host mapping, например `operation.idempotency_key`. Это не обещание exactly-once, но это проверяемый контракт передачи ключа.
+
+Второе — подпись callback. Parsed payload и raw signed bytes не смешиваются. Host-required mapping и verified HTTP entrypoint имеют разные гарантии.
+
+Третье — schema-bounded projection. В payout request уходят только разрешённые provider fields, а не весь внутренний объект получателя.
+
+Четвёртое — provenance. Для intent, mapping, amount, status и webhook можно увидеть исходное предложение, override и нерешённые вопросы. Compatibility report собирает эту информацию без выдуманного score.
+
+Локальный UI делает review доступным без ручного чтения большого YAML, но не создаёт отдельную логику. Если UI и CLI дают разный результат, это ошибка; architecture не допускает две версии semantic pipeline.
+
+## Проверенный результат и граница обещаний
+
+После финального review проходит 123 tests и 749 assertions без failures, errors и skips. `bin/demo` создаёт три полных bundle; все generated services проходят `ruby -c`. Повторная генерация canonical bundle только из final manifest даёт те же пять файлов по SHA-256. В Windows проверены ASCII- и Unicode-пути с пробелами, запуск локального HTTP server, generation и скачивание.
+
+Тесты исполняют request construction, auth, amount conversion, schema projection, required/nullable behavior, response selection, status/error normalization и callbacks с host/client test doubles. Они не заменяют sandbox конкретного провайдера.
+
+Готовый результат — автономная, reviewable заготовка payout-интеграции для заявленного OpenAPI subset. Для production-подключения остаются credentials, точный host contract, HTTP transport и sandbox verification. Не поддержаны remote/cyclic refs, advanced composition/discriminator, OAuth execution, OpenAPI callbacks keyword, полный runtime JSON Schema validator и per-array-element host mappings. Две alternative specs доказывают структурную универсальность внутри этого scope, но не называются production integrations.
+
+Если сформулировать результат одной фразой: мы переводим OpenAPI не в очередной низкоуровневый SDK, а в проверяемый Ruby payout adapter, где автоматические выводы, решения человека и оставшиеся риски видны до подключения к провайдеру.
+
+## Короткая версия для устного ответа
+
+«Payout Studio принимает OpenAPI YAML или JSON и создаёт пять согласованных файлов: Ruby adapter под `Provider::BaseService`, инструкцию, fixtures, final manifest и compatibility report. Parser сначала строит provider-neutral Generic IR, затем детерминированные rules находят payout operations, auth, statuses, errors, mappings и webhook. Неоднозначные решения не угадываются: они остаются warnings и подтверждаются generic override с audit.
+
+Generated service действительно формирует запрос, применяет API key, Bearer или Basic auth, преобразует сумму, проверяет required fields, нормализует разные HTTP responses и обрабатывает callback. Parsed callback оставляет authentication хосту; отдельный raw-body entrypoint проверяет HMAC. Реальный transport, persistence и retry policy принадлежат host-приложению.
+
+Один pipeline проверен на canonical payout API и двух structurally different fixtures: JSON transfer с Bearer и YAML withdrawal с Basic, nested responses и base64 webhook. Результат — 5/2/5 capabilities без выдумывания отсутствующих методов. Финальная suite — 123 tests и 749 assertions; три bundles проходят `ruby -c`, а manifest-only generation побайтово совпадает с исходной. Мы заявляем рабочую заготовку для поддержанного subset, а не весь OpenAPI или production certification».
+
+## Отдельно: будущий storyboard финала
+
+Этот блок — только основа будущего deck. Он не задаёт тайминг, монтаж или порядок live demo и не должен попадать в текст третьего чекпоинта без сокращения.
+
+| Слайд | Один тезис | Что показать |
 |---|---|---|
-| Canonical payout | YAML, API key, payout endpoints | 5 capabilities, подтверждения через YAML override, 6→1 warnings |
-| Alternative transfer | OpenAPI 3.1 JSON, Bearer, `/transfers`, другие поля | 2 capabilities; cancel/webhook/balance не заявлены, mapping вопросы сохранены |
-| Alternative withdrawal | YAML, Basic, nested payload, endpoint без operationId | JSON override: 4→5 capabilities, 9→1 warnings |
+| 1. Ручной разрыв | OpenAPI описывает transport, приложению нужен payout contract | spec рядом с host fields/statuses |
+| 2. Результат | Один запуск создаёт service, docs, fixtures, manifest и report | список пяти реальных файлов |
+| 3. Контроль решений | Structure, inference и human review — разные состояния | pipeline и before/after audit |
+| 4. Исполняемый adapter | Request/auth/response/callback работают через host boundary | методы generated Ruby и test double |
+| 5. Преобразования | Amount, fields, statuses и required rules становятся runtime behavior | ×100, status table, `required_if`, projection |
+| 6. Универсальность | YAML/JSON, API key/Bearer/Basic и разные schemas проходят один core | таблица трёх specs и 5/2/5 |
+| 7. Проверки | Contract tests и safe publication отделены от sandbox promise | 123/749, `ruby -c`, manifest byte match |
+| 8. Граница готовности | Получена проверяемая заготовка; production требует host/credentials/sandbox | READY/NEEDS REVIEW и короткий список границ |
 
-## Слайд 6. Качество: какие проверки действительно выполнены
-
-- **Мысль:** разделять синтаксис артефактов, runtime contract tests и будущее подключение.
-- **Показать:** 123 tests / 749 assertions после этапа 2; три demo providers + `ruby -c`; список тестируемого runtime поведения. Детали и границы Windows smoke — REVIEW_REPORT.md.
-- **Сказать:** «Тесты проверяют запросы, преобразования, auth, статусы, ошибки и callbacks с host test double. Перед записью валидируются артефакты. Реальный sandbox требует окружения и credentials и не входит в доказанный результат».
-- **Критерий:** качество реализации — 10; сервис/преобразования.
-- **Evidence:** `test/generator/generated_service_contract_test.rb`, `alt_withdrawal_service_contract_test.rb`, `review_regressions_test.rb`, `output_writer_test.rb`; фактическая проверка browser upload/download описана в guide.
-
-## Слайд 7. Дополнительная ценность для платёжных интеграций
-
-- **Мысль:** адаптер сохраняет важные для выплат границы и объясняет решения.
-- **Показать:** четыре конкретных примера: idempotency source, HMAC/raw body, schema projection host-полей, provenance/audit.
-- **Сказать:** «Показываем не общие слова о надёжности, а поведение: явный источник ключа идемпотентности, проверку подписи, ограничение исходящего payload и историю подтверждений».
-- **Критерий:** отраслевые дополнительные преимущества — 6; полнота — 8.
-- **Evidence:** generated `process_verified_callback`, `verify_webhook_signature`, `secure_compare`, `project_to_provider_schema`, `validate_required_body!`; mappings и audit. Parsed `process_callback` возвращает `host_required`, не утверждает проверку подписи. Idempotency header не означает глобальную гарантию exactly-once; HMAC не означает security certification.
-
-## Слайд 8. Итог и граница готовности
-
-- **Мысль:** получена автономная, проверяемая заготовка интеграции с честно описанными ограничениями.
-- **Показать:** «OpenAPI → проверяемые решения → Ruby + docs + fixtures», три providers, локальная работа без LLM/runtime внешних API.
-- **Сказать:** «Обязательный путь реализован и демонстрируется. Для подключения конкретной production-системы остаются host boundary, credentials и sandbox. Новые форматы OpenAPI и generated RSpec — дальнейшее развитие».
-- **Критерий:** полнота ответа кейсу и ясность защиты.
-- **Evidence:** работающий UI/CLI, manifest-only generation, README supported subset, предыдущие live evidence.
-
-## Что подготовить перед оформлением deck
-
-1. Получить у модератора точный лимит и слот команды, состав жюри и актуальную инструкцию по передаче репозитория. Оригинальная рубрика/Q&A уже сверены локально; отдельный файл актуального регламента не найден.
-2. Снять несколько кадров финального UI: вход + capabilities, audit, метод Ruby, три providers. Не заменять живую демонстрацию десятком скриншотов.
-3. Отрепетировать на презентационном браузере/экране. Автоматизированная проверка отдельного Chrome пока не выполнена — он не подключён к управлению; встроенный браузер прошёл upload/download.
-4. Оставить CLI demo и сгенерированный пакет как резерв. Новые product features перед защитой не требуются.
-
-## Краткая матрица защиты
-
-| Требование | Реализация | Демонстрация | Оставшаяся граница |
-|---|---|---|---|
-| Разбор API | Parser, refs, schemas, auth/responses/errors | Исходник → manifest/evidence | Поддерживаемый subset, не весь OpenAPI |
-| Ruby service | Manifest-driven BaseService-style adapter | Реальные методы и download | Документированный host boundary, не подтверждённый production host |
-| Data mappings | Amount/status/field/conditional transformations | ×100, статусы, required_if, tests | Полный JSON Schema runtime validator отсутствует |
-| Универсальность | Generic rules + YAML/JSON overrides | Три структурно разных входа | Две альтернативы — собственные fixtures |
-| UX/docs | UI, warnings, audit, пять файлов | Полный flow и читаемые docs | Репетиция в целевом Chrome/на проекторе |
-| Качество | Contract tests, validation, no-overwrite output | Green suite, ruby -c, реальные скачивания | Нет sandbox certification/generated RSpec |
+Перед оформлением deck нужно получить у модератора точный лимит и слот, проверить local UI в фактическом presentation browser и оставить `bin/demo` с готовым bundle как резерв. Новые product features до этой репетиции не требуются.

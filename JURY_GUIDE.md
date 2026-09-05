@@ -2,7 +2,7 @@
 
 Самый короткий способ проверить проект — запустить `bundle exec ruby bin/demo`. Команда проводит три различающиеся OpenAPI-спецификации через один публичный Ruby pipeline, создаёт по пять файлов на провайдера и проверяет синтаксис каждого generated service. Ниже собраны ожидаемый результат, доказательства по всем подкритериям и границы, за которые решение не выдаётся.
 
-Документ основан на финальном ревью 5 сентября 2026 года: **123 tests / 749 assertions, 0 failures, 0 errors, 0 skips**; три полных bundle; manifest-only byte comparison; Windows-запуск из корня в ASCII- и Unicode-путях с пробелами; локальная HTTP-генерация и скачивание. Условия проверок и исправления R1–R10 записаны в [REVIEW_REPORT.md](REVIEW_REPORT.md). Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
+Документ основан на финальном ревью 5 сентября 2026 года: **123 tests / 749 assertions, 0 failures, 0 errors, 0 skips**; три полных bundle; manifest-only byte comparison; Windows-запуск из корня в ASCII- и Unicode-путях с пробелами; локальная HTTP-генерация и скачивание. Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
 
 ## Проверка за несколько минут
 
@@ -210,9 +210,7 @@ Transfer-вариант важен именно неполнотой: отсут
 |---|---|
 | Установка, команды, UI, overrides и supported subset | [README.md](README.md) |
 | Модули, их входы/выходы, зависимости и расширение | [MODULE_MAP.md](MODULE_MAP.md) |
-| Пошаговая live-демонстрация | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
-| Исправленные проблемы и фактические проверки | [REVIEW_REPORT.md](REVIEW_REPORT.md) |
-| Полная трассировочная матрица исходной рубрики | [CRITERIA_MATRIX.md](CRITERIA_MATRIX.md) |
-| Содержание будущей презентации | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
+| Пошаговая live-демонстрация и резервный CLI-сценарий | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
+| Связный текст третьего чекпоинта и отдельный будущий storyboard | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
 
-`docs/PROJECT_CONTEXT.md` и `docs/PROJECT_STATUS.md` — внутренние рабочие документы и локально исключены через `.git/info/exclude`. Все материалы, нужные для проверки жюри, находятся в корне репозитория и не зависят от этих локальных файлов.
+Рабочие планы, матрица ревью, review report и файлы из `docs/` не нужны для воспроизведения результата: все актуальные claims, команды, ссылки и границы собраны в этом руководстве. Внутренние материалы можно хранить локально вне judge-facing набора.
