@@ -18,6 +18,7 @@ module IntegrationGenerator
       def initialize(root: File.expand_path("../../..", __dir__), output_root: nil)
         @root = root
         @output_root = output_root || File.join(root, "output")
+        @downloads = {}
       end
 
       def examples
@@ -40,14 +41,29 @@ module IntegrationGenerator
         inferred, final = manifests(input)
         artifacts = IntegrationGenerator::Generator::ArtifactBundle.new(final).render
         target = IntegrationGenerator::Generator::OutputWriter.new.write(artifacts, unique_output_path)
+        token = File.basename(target)
+        archive_name = "#{final.to_h.dig('provider', 'slug') || 'provider'}_integration.tar.gz"
+        archive_bytes = archive(artifacts)
+        @downloads[token] = artifacts.merge(archive_name => archive_bytes)
+        download_prefix = "/api/download/#{token}/"
         response_for(inferred, final).merge(
           "artifacts" => artifacts,
+          "downloads" => artifacts.keys.to_h { |name| [name, download_prefix + name] },
           "output_directory" => relative_output_path(target),
           "archive" => {
-            "filename" => "#{final.to_h.dig('provider', 'slug') || 'provider'}_integration.tar.gz",
-            "base64" => [archive(artifacts)].pack("m0")
+            "filename" => archive_name,
+            "download_url" => download_prefix + archive_name,
+            "base64" => [archive_bytes].pack("m0")
           }
         )
+      end
+
+      # Exact bytes produced by this server's generator; never a filesystem path.
+      def download(token, filename)
+        contents = @downloads.dig(token, filename)
+        raise Error.new("WEB_NOT_FOUND", "Generated download was not found; generate the package again") unless contents
+
+        contents
       end
 
       private

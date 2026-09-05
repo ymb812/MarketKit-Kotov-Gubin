@@ -32,13 +32,24 @@ class WebApplicationTest < Minitest::Test
 
   def test_generate_publishes_five_artifacts_and_matching_safe_archive
     Dir.mktmpdir("web-output") do |directory|
-      result = app_for(output_root: directory).generate(input_for("alt_withdrawal_provider.yaml", "alt_withdrawal_overrides.json", provider: "alt_withdrawal"))
+      app = app_for(output_root: directory)
+      result = app.generate(input_for("alt_withdrawal_provider.yaml", "alt_withdrawal_overrides.json", provider: "alt_withdrawal"))
 
       assert_equal 5, result.fetch("artifacts").length
       assert_equal result.fetch("artifacts"), archive_entries(result.dig("archive", "base64"))
       assert_match(%r{\Aweb-[0-9a-f]{16}\z}, File.basename(result.fetch("output_directory")))
       assert File.directory?(File.join(directory, File.basename(result.fetch("output_directory"))))
       assert_includes result.fetch("artifacts").keys, "alt_withdrawal_service.rb"
+      token = File.basename(result.fetch("output_directory"))
+      result.fetch("artifacts").each do |name, content|
+        assert_equal content, app.download(token, name)
+        assert_equal "/api/download/#{token}/#{name}", result.dig("downloads", name)
+      end
+      assert_equal result.dig("archive", "base64").unpack1("m0"), app.download(token, result.dig("archive", "filename"))
+      ["../../Gemfile", "Gemfile", "missing.rb"].each do |name|
+        assert_raises(IntegrationGenerator::Error) { app.download(token, name) }
+      end
+      assert_raises(IntegrationGenerator::Error) { app.download("web-0000000000000000", "INTEGRATION.md") }
     end
   end
 

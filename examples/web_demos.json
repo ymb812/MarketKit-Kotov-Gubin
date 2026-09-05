@@ -3,7 +3,7 @@
     {
       "id": "canonical-payout",
       "title": "Canonical payout API",
-      "description": "Reference payout specification with reviewed NovaPay semantics.",
+      "description": "Официальный пример кейса: пять payout-возможностей.",
       "filename": "provider_api.yaml",
       "provider": "novapay",
       "auth": "API key",
@@ -12,7 +12,7 @@
     {
       "id": "transfer-provider",
       "title": "Alternative transfer API",
-      "description": "Structurally different JSON OpenAPI with Bearer authentication and intentionally missing capabilities.",
+      "description": "Другие поля; отмена, webhook и баланс не заявлены.",
       "filename": "alt_transfer_provider.json",
       "provider": "alt_transfer",
       "auth": "Bearer token",
@@ -21,7 +21,7 @@
     {
       "id": "withdrawal-provider",
       "title": "Alternative withdrawal API",
-      "description": "YAML OpenAPI with Basic authentication, nested payloads and reviewed JSON overrides.",
+      "description": "Вложенные ответы; выбор status-операции через override.",
       "filename": "alt_withdrawal_provider.yaml",
       "provider": "alt_withdrawal",
       "auth": "Basic authentication",

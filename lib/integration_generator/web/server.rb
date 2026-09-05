@@ -58,6 +58,15 @@ module IntegrationGenerator
       end
 
       def static(request, response)
+        download = %r{\A/api/download/(web-[0-9a-f]{16})/([a-zA-Z0-9][a-zA-Z0-9_.-]*)\z}.match(request.path)
+        if request.request_method == "GET" && download
+          response.body = @application.download(download[1], download[2])
+          response.status = 200
+          response["Content-Type"] = download[2].end_with?(".tar.gz") ? "application/gzip" : "application/octet-stream"
+          response["Content-Disposition"] = "attachment; filename=\"#{download[2]}\""
+          response["X-Content-Type-Options"] = "nosniff"
+          return
+        end
         return json_error(response, 404, "WEB_NOT_FOUND", "Route was not found") unless request.request_method == "GET" && STATIC_FILES.key?(request.path)
 
         filename, content_type = STATIC_FILES.fetch(request.path)
@@ -84,6 +93,7 @@ module IntegrationGenerator
       end
 
       def client_error_status(error)
+        return 404 if error.code == "WEB_NOT_FOUND"
         return 413 if error.code == "WEB_REQUEST_TOO_LARGE"
         return 400 if error.code.start_with?("WEB_") || error.code.include?("PARSE") || error.code.include?("INVALID") || error.code.include?("FORMAT")
 

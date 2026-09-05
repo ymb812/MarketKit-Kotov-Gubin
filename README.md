@@ -70,17 +70,19 @@ bundle exec ruby bin/serve
 
 UI работает поверх того же Ruby pipeline; JavaScript только отображает manifest и отправляет локальные запросы. WEBrick устанавливается через `bundle install`; Node.js, сборка frontend, CDN и внешние API не нужны. Сервер слушает только `127.0.0.1`; это однопользовательский локальный инструмент, не публичный hosted service.
 
+Подробный сценарий: [DEMO_GUIDE.md](DEMO_GUIDE.md). Основа будущей презентации: [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md). Оба документа входят в Git.
+
 Короткий сценарий показа:
 
 1. Выберите canonical payout API. Покажите capabilities, endpoints, confidence/evidence и предупреждения.
-2. Нажмите «Проверить demo override», просмотрите YAML, затем «Анализировать». В обзоре предупреждения сокращаются с 6 до 1; callback secret остаётся явной runtime-настройкой.
-3. Откройте «Преобразования» и «Auth и callbacks»: ×100, подтверждённые статусы, host/provider fields, signature header/encoding и HTTP errors.
+2. Нажмите «Открыть overrides», просмотрите YAML, включите «Применить overrides при следующем анализе», затем нажмите «Анализировать». В обзоре предупреждения сокращаются с 6 до 1; callback secret остаётся явной runtime-настройкой.
+3. Откройте «Преобразования» и «Подключение»: ×100, подтверждённые статусы, host/provider fields, signature header/encoding и HTTP errors.
 4. Нажмите «Сгенерировать пакет». Пять файлов доступны в preview, по одному и архивом `.tar.gz`; копия всегда сохраняется в новом `output/web-<id>/` после `ruby -c`.
 5. Переключитесь на transfer API (JSON, Bearer, 2 capabilities) и withdrawal API (YAML, Basic, nested payload). У withdrawal JSON override переводит capabilities 4 → 5, warnings 9 → 1.
 
-Можно загрузить собственные YAML/JSON или вставить их в редактор. Изменение входа сбрасывает старый результат; генерация доступна только после нового успешного анализа. Лимит загружаемого файла — 1 МБ, всего JSON-запроса — 2 МБ. Не помещайте реальные credentials в demo-spec: секреты нужны в ENV host-приложения, а не генератору.
+Свой файл: в «Обзоре» справа от «Входная спецификация» нажмите «Загрузить свою OpenAPI ↑». Можно также загрузить YAML/JSON в панели OpenAPI раздела «Спецификация» или вставить текст в редактор. Изменение входа сбрасывает старый результат; генерация доступна только после нового успешного анализа. Лимит загружаемого файла — 1 МБ, всего JSON-запроса — 2 МБ. Не помещайте реальные credentials в demo-spec: секреты нужны в ENV host-приложения, а не генератору.
 
-Для показа используйте обычный браузер. Если встроенная webview не поддерживает диалог файлов или скачивания, вставьте текст в редактор и возьмите готовые файлы из указанного `output/web-<id>/`. CLI-демо ниже остаётся резервным сценарием.
+Загрузка файлов и реальные скачивания проверены во встроенном браузере Codex. Ссылки на скачивание действуют до перезапуска сервера; затем сгенерируйте пакет заново. Файлы в `output/web-<id>/` сохраняются. Отдельный презентационный Chrome ещё требует smoke test. CLI-демо ниже остаётся резервным сценарием.
 
 ## Демо для оценки — одна команда
 
@@ -301,6 +303,12 @@ Unsupported schema/auth/callback constructs становятся warnings. Broke
 
 ```bash
 bundle exec rake test
+```
+
+Проверки frontend presentation logic (Node нужен только для этих dev-тестов):
+
+```bash
+node --test test/web/frontend_test.js
 ```
 
 Тесты покрывают parser, deterministic semantic rules, ambiguity guards, status/error/webhook/field extraction, manifest validation, все четыре generators, runtime request/response/callback contract, no-overwrite CLI и три demo specs. Перед публикацией writer отдельно запускает `ruby -c` для generated service.
