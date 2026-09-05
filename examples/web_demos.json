@@ -1,0 +1,31 @@
+{
+  "examples": [
+    {
+      "id": "canonical-payout",
+      "title": "Canonical payout API",
+      "description": "Reference payout specification with reviewed NovaPay semantics.",
+      "filename": "provider_api.yaml",
+      "provider": "novapay",
+      "auth": "API key",
+      "override_filename": "novapay_overrides.yaml"
+    },
+    {
+      "id": "transfer-provider",
+      "title": "Alternative transfer API",
+      "description": "Structurally different JSON OpenAPI with Bearer authentication and intentionally missing capabilities.",
+      "filename": "alt_transfer_provider.json",
+      "provider": "alt_transfer",
+      "auth": "Bearer token",
+      "override_filename": null
+    },
+    {
+      "id": "withdrawal-provider",
+      "title": "Alternative withdrawal API",
+      "description": "YAML OpenAPI with Basic authentication, nested payloads and reviewed JSON overrides.",
+      "filename": "alt_withdrawal_provider.yaml",
+      "provider": "alt_withdrawal",
+      "auth": "Basic authentication",
+      "override_filename": "alt_withdrawal_overrides.json"
+    }
+  ]
+}

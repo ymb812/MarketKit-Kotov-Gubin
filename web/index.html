@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Анализ OpenAPI и генерация payout-интеграций с проверяемыми mappings.">
+  <title>Payout Studio — Integration workspace</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Перейти к рабочей области</a>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">p<span>↗</span></span><span>Payout<span class="brand-light">Studio</span></span></a>
+    <div class="workspace-label">INTEGRATION WORKSPACE</div>
+    <nav class="navigation" aria-label="Разделы интеграции">
+      <button class="nav-item active" data-view="overview" aria-current="page"><span class="nav-icon">◫</span>Обзор<span class="nav-end">↗</span></button>
+      <button class="nav-item" data-view="source"><span class="nav-icon">{ }</span>Спецификация</button>
+      <button class="nav-item" data-view="mappings"><span class="nav-icon">⇄</span>Преобразования</button>
+      <button class="nav-item" data-view="webhook"><span class="nav-icon">⌁</span>Auth и callbacks</button>
+      <button class="nav-item" data-view="artifacts"><span class="nav-icon">▤</span>Артефакты<span id="artifact-count" class="nav-count">0</span></button>
+    </nav>
+    <div class="sidebar-note"><span class="small-label">ОДИН КОНТРАКТ</span><code>Provider::<br>BaseService</code><p>Разные API.<br>Единая payout-интеграция.</p><div class="mini-flow"><span>API</span><i>→</i><span>IR</span><i>→</i><span>Ruby</span></div></div>
+    <div class="sidebar-bottom"><span class="online-dot"></span>Локальный workspace<span class="event-label">HACKGENESIS · 2026</span></div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar"><div class="breadcrumbs">Workspace <span>/</span> <strong id="breadcrumb">Обзор</strong></div><div class="topbar-meta"><span class="pill neutral">Ruby core</span><span class="offline-label">Без внешних API</span></div></header>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow">OPENAPI → PAYOUT ADAPTER</div><h1>Интеграция провайдера<span class="title-dot">.</span></h1><p>Разберите API, проверьте mappings и получите готовую заготовку сервиса.</p></div><button id="generate" class="button primary" data-mutate disabled><span>Сгенерировать пакет</span><span>↗</span></button></div>
+      <ol class="pipeline" aria-label="Этапы генерации"><li class="stage current" id="stage-source"><span>01</span> OpenAPI</li><li class="stage" id="stage-analysis"><span>02</span> Анализ</li><li class="stage" id="stage-review"><span>03</span> Review & overrides</li><li class="stage" id="stage-artifacts"><span>04</span> Артефакты</li></ol>
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+      <div id="activity" class="activity" role="status" aria-live="polite">Подключение к локальному Ruby pipeline…</div>
+
+      <section id="view-overview" class="view">
+        <div class="section-heading"><h2>Выберите отправную точку</h2><button class="text-button" id="upload-shortcut" data-mutate>Загрузить свою OpenAPI <span>↑</span></button></div>
+        <div id="examples" class="example-grid"><div class="loading-card">Загрузка demo-спецификаций…</div></div>
+        <div class="metrics"><article class="metric"><span class="metric-label">Payout capabilities</span><div><strong id="metric-capabilities">—</strong><span class="metric-unit">/ 5</span><span class="metric-icon blue">↗</span></div><small>Обнаружены в спецификации</small></article><article class="metric"><span class="metric-label">HTTP-операции</span><div><strong id="metric-operations">—</strong><span class="metric-icon green">⇄</span></div><small id="metric-auth">Ожидание анализа</small></article><article class="metric"><span class="metric-label">Предупреждения</span><div><strong id="metric-warnings">—</strong><span class="metric-icon amber">!</span></div><small id="metric-audit">Неоднозначности видны до генерации</small></article></div>
+        <div class="overview-grid">
+          <article class="panel capabilities-panel"><div class="panel-heading"><div><span class="eyebrow">РЕЗУЛЬТАТ АНАЛИЗА</span><h2>Возможности API</h2></div><span class="pill neutral" id="spec-version">OpenAPI</span></div><div id="capabilities" class="capability-list"><div class="empty-inline">Выберите спецификацию, чтобы увидеть capabilities.</div></div><div class="panel-footer"><span>Confidence — оценка детерминированных правил</span><button class="text-button" data-view="mappings">Mappings →</button></div></article>
+          <div class="review-column"><article class="panel review-panel"><div class="panel-heading"><div><span class="eyebrow">ЧЕЛОВЕК В ЦИКЛЕ</span><h2>Проверка решений</h2></div><span class="review-symbol">✳</span></div><div id="readiness" class="readiness"><span class="pill neutral">Ожидание анализа</span></div><p id="review-description">Неоднозначные факты остаются видимыми в manifest.</p><div id="review-delta" class="review-delta" hidden></div><button id="review-demo" class="button secondary full-width" data-mutate disabled>Проверить demo override <span>→</span></button><button class="text-button full-width" data-view="source">Открыть спецификацию и overrides</button></article><article class="contract-card"><div class="contract-icon">{ }</div><div><strong>Manifest — источник артефактов</strong><p>Один проверяемый контракт для кода, документации и fixtures.</p></div></article></div>
+        </div>
+        <article class="panel warnings-panel"><div class="panel-heading"><h2>Что требует внимания</h2><span id="warning-count" class="pill neutral">—</span></div><div id="warnings"><div class="empty-inline">Предупреждения появятся после анализа.</div></div></article>
+      </section>
+
+      <section id="view-source" class="view" hidden>
+        <div class="section-heading"><div><h2>Спецификация и review</h2><p>YAML или JSON. Изменения применяются после повторного анализа.</p></div><button id="analyze" class="button primary" data-mutate>Анализировать <span>→</span></button></div>
+        <div class="source-meta"><label>Имя файла<input id="filename" value="provider_api.yaml" autocomplete="off"></label><label>Provider slug<input id="provider" placeholder="определится из OpenAPI" autocomplete="off"></label></div>
+        <div class="editor-grid"><article class="panel"><div class="editor-heading"><h3>OpenAPI</h3><label class="file-button" for="spec-file">Загрузить файл ↑</label><input id="spec-file" type="file" accept=".yaml,.yml,.json" class="file-input"></div><textarea id="specification" class="code-editor" spellcheck="false" aria-label="OpenAPI спецификация" placeholder="openapi: 3.0.3"></textarea><div class="editor-foot">Можно перетащить файл в редактор · до 1 МБ</div></article><article class="panel"><div class="editor-heading"><h3>Overrides</h3><label class="file-button" for="override-file">Загрузить файл ↑</label><input id="override-file" type="file" accept=".yaml,.yml,.json" class="file-input"></div><textarea id="overrides" class="code-editor" spellcheck="false" aria-label="Generic overrides" placeholder="Выберите demo с override или загрузите свой YAML / JSON."></textarea><div class="editor-foot"><label class="checkbox-label"><input id="use-overrides" type="checkbox">Применить эти overrides при анализе</label></div></article></div>
+        <div class="hint-box">Override подтверждает конкретные решения и сохраняет source, reason и историю изменений. Секреты и credentials задаются в окружении host-приложения.</div>
+      </section>
+
+      <section id="view-mappings" class="view" hidden><div class="section-heading"><div><h2>Преобразования данных</h2><p>От host-модели к полям провайдера и обратно.</p></div><span class="pill neutral">Manifest v1</span></div><div id="mapping-content" class="stack"><div class="panel empty-inline">Сначала проанализируйте OpenAPI.</div></div></section>
+      <section id="view-webhook" class="view" hidden><div class="section-heading"><div><h2>Авторизация и callbacks</h2><p>Требования подключения, подпись уведомлений и обработка ошибок.</p></div></div><div id="webhook-content" class="stack"><div class="panel empty-inline">Сначала проанализируйте OpenAPI.</div></div></section>
+      <section id="view-artifacts" class="view" hidden><div class="section-heading"><div><h2>Артефакты интеграции</h2><p id="artifact-description">Пакет появится после генерации и проверки Ruby-синтаксиса.</p></div><button id="download-bundle" class="button primary" disabled>Скачать .tar.gz <span>↓</span></button></div><div id="artifact-empty" class="panel artifact-empty"><div class="empty-icon">▤</div><h3>Из manifest — в рабочие файлы</h3><p>Ruby service, инструкция интеграции, fixtures,<br>compatibility report и точный final manifest.</p><button id="generate-empty" class="button secondary" data-mutate disabled>Сгенерировать пакет →</button></div><div id="artifact-workspace" class="artifact-workspace" hidden><div id="artifact-files" class="panel file-list" aria-label="Файлы пакета"></div><article class="panel code-panel"><div class="editor-heading"><h3 id="preview-filename">—</h3><button id="download-file" class="text-button">Скачать файл ↓</button></div><pre id="artifact-preview" tabindex="0" aria-label="Содержимое артефакта"></pre></article></div></section>
+      <footer class="workspace-footer"><span><span class="online-dot"></span>Детерминированный анализ · без LLM в runtime</span><span id="source-hash">OpenAPI → IR → Manifest → Ruby</span></footer>
+    </main>
+  </div>
+</body>
+</html>

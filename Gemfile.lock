@@ -3,6 +3,7 @@ GEM
   specs:
     minitest (5.25.4)
     rake (13.2.1)
+    webrick (1.9.2)
 
 PLATFORMS
   ruby
@@ -11,6 +12,7 @@ PLATFORMS
 DEPENDENCIES
   minitest (~> 5.25.4)
   rake (~> 13.2.1)
+  webrick (~> 1.9)
 
 RUBY VERSION
    ruby 3.4.10p104
