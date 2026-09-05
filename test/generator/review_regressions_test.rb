@@ -45,6 +45,23 @@ class ReviewRegressionsTest < Minitest::Test
     assert_includes error.message, "body.recipient.type"
   end
 
+  def test_required_nullable_field_preserves_explicit_null_but_rejects_absence
+    schema = @raw.dig("components", "schemas", "CreatePayoutRequest")
+    schema["properties"]["memo"] = { "type" => "string", "nullable" => true }
+    schema["required"] << "memo"
+    add_override("memo", "operation.memo")
+    service = generated_service
+
+    assert_raises(ArgumentError) { service.create_request(operation) }
+    body = service.create_request(operation.merge("memo" => nil))[:body]
+    assert body.key?("memo")
+    assert_nil body["memo"]
+    schema["required"].delete("memo")
+    service = generated_service
+    refute service.create_request(operation)[:body].key?("memo")
+    assert service.create_request(operation.merge("memo" => nil))[:body].key?("memo")
+  end
+
   def test_schema_declared_child_can_be_added_by_override
     @raw.dig("components", "schemas", "Recipient", "properties")["routing"] = { "type" => "string" }
     add_override("recipient.routing", "operation.routing")

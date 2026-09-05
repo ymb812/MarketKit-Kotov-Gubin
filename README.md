@@ -33,6 +33,10 @@ bundle --version
 
 ## Установка и запуск
 
+Команды выполняются из корня репозитория. На Windows Ruby может искажать кириллицу в пути скрипта; точки запуска используют существующий путь к проекту и UTF-8 `Dir.pwd` как резерв. При запуске из каталога с кириллицей сначала перейдите в корень проекта. Переименование папки в ASCII остаётся обходным вариантом для старой версии кода, но `-Ilib` само по себе не устраняет эту проблему.
+
+Канонический `examples/provider_api.yaml` должен сохранять LF: правило находится в `.gitattributes`. Оно важно при `core.autocrlf=true`, поскольку manifest хранит SHA-256 исходных байтов. При несовпадении хэша проверьте `git ls-files --eol examples/provider_api.yaml` и локальные изменения; не заменяйте ожидаемый хэш в тесте. Правило должно входить в передаваемый репозиторий, а не оставаться только локальным файлом.
+
 ```bash
 bundle install
 bundle exec ruby bin/integrate --help
@@ -159,7 +163,11 @@ ruby -c output/checkpoint_withdrawal/alt_withdrawal_service.rb
 bundle exec ruby bin/integrate generate --manifest output/checkpoint_novapay/integration_manifest.yml --output output/checkpoint_from_manifest
 ```
 
-Generated service безопасно блокирует неподтверждённые mappings и неполную webhook verification. Параметры `allow_unreviewed: true` / `allow_unverified: true` предназначены только для явного inspection/demo, не для production.
+Generated service блокирует неподтверждённые mappings и неполную raw-body webhook verification. Параметры `allow_unreviewed: true` / `allow_unverified: true` предназначены только для явного inspection/demo, не для production.
+
+По уточнённому контракту Q&A `process_callback(payload)` принимает разобранный JSON Hash. Этот метод выполняет mapping и возвращает `signature_verification: :host_required`: проверка подлинности входящего уведомления — ответственность HTTP-слоя хоста до применения результата. Для обработки с проверкой подписи используйте `process_verified_callback(raw_body, headers:)`: метод проверяет HMAC по исходным байтам и обрабатывает именно подписанное тело. Старые вызовы `process_callback` с явными `raw_body`/`headers` сохраняют путь проверки подписи. Нельзя восстановить подписанные байты повторной сериализацией Hash.
+
+Статус берётся из подтверждённого payload mapping, event возвращается отдельно и не переопределяет его. Неизвестный статус (включая неописанный `accepted`) остаётся `unknown`. Error response содержит HTTP/code/message/Retry-After/raw; retry, блокировка провайдера и сохранение provider operation id выполняются хостом. В примере задания HTTP 402 соответствует `insufficient_balance` и действию `retry later`; генератор сам не отправляет повторные выплаты.
 
 Generic status synonyms сохраняются в manifest как предложения, но generated runtime использует их только после подтверждения override. До подтверждения runtime возвращает `unknown`, а fixtures не обещают соответствующий normalized status. Для старых manifests это правило также определяется по `provenance: default_rule`.
 
@@ -193,7 +201,7 @@ bundle exec ruby bin/integrate generate `
 
 - inferred: OpenAPI operations/contracts, auth, response/error shapes и остальные структурные факты;
 - overridden: operation intent confirmation, все пять status mappings, amount unit/direction/factor, необходимые request mapping sources, `required_if` и webhook `hmac_sha256/hex`;
-- unresolved: callback secret по-прежнему отсутствует в OpenAPI и должен прийти из `NOVAPAY_WEBHOOK_SECRET`; callback всё равно требует точный raw body и signature header.
+- unresolved: callback secret по-прежнему отсутствует в OpenAPI и должен прийти из `NOVAPAY_WEBHOOK_SECRET` для `process_verified_callback`; этот путь требует точный raw body и signature header. Parsed `process_callback` оставляет аутентификацию хосту.
 
 Финальный `integration_manifest.yml` хранит `overrides.applied_changes` с before/after, source/reason и `resolved_warnings`. Warning исчезает из unresolved-списка только по точному селектору `code + location`, связанному с реально применённым изменением; остальные warnings сохраняются.
 
@@ -321,4 +329,4 @@ node --test test/web/frontend_test.js
 
 ## Следующий этап
 
-Payout Studio реализован поверх Ruby pipeline. Следующий этап — презентация по критериям выше и репетиция на том браузере/экране, с которого будет показ. Сам deck пока не создан. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция остаются в backlog после основного демонстрационного сценария.
+Ревью перед третьим чекпоинтом завершено: [REVIEW_REPORT.md](REVIEW_REPORT.md), [матрица критериев](CRITERIA_MATRIX.md). Финальная suite — 123 tests / 749 assertions; три demo bundles и Windows root launch проверены. Следующий этап по [плану](CHECKPOINT_3_PLAN.md) — документация для жюри и карта модулей, затем сильный текст по всем подкритериям. Видео, синхронизация и deck отложены. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция остаются в backlog.

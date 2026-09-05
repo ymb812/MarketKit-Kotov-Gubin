@@ -143,7 +143,7 @@ module IntegrationGenerator
               "- Signature: `#{signature['header'] || 'unknown'}` / `#{signature['algorithm'] || 'unknown'}` / `#{signature['encoding'] || 'unknown'}`",
               "- Payload status path: `#{payload['status_path'] || 'unknown'}`",
               "- Provider operation id path: `#{payload['provider_operation_id_path'] || 'unknown'}`",
-              "- Raw body, signature header and callback secret remain runtime requirements."
+              "- Parsed `process_callback(payload)` leaves authentication to the host (`host_required`). Raw body, signature header and callback secret are required by `process_verified_callback(raw_body, headers:)` at the HTTP boundary."
             ]
           )
         end

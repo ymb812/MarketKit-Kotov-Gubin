@@ -51,7 +51,7 @@ module IntegrationGenerator
 
         response.fetch("content", {}).each_value do |media|
           schema = media["schema"]
-          Support.schema_entries(schema).each do |path, child|
+          Support.schema_entries(schema, direction: :response).each do |path, child|
             field_name = path.split(".").last.to_s.delete_suffix("[]")
             if CODE_FIELDS.include?(field_name)
               code_paths << path

@@ -302,7 +302,7 @@ function renderWebhook(manifest) {
   if (webhook.status === "detected") {
     html += panel("Проверка подписи", kv([["Операция", webhook.operation_key], ["Signature header", webhook.signature?.header ?? "Нужен выбор"], ["Алгоритм", webhook.signature?.algorithm ?? "Нужен override"], ["Encoding", webhook.signature?.encoding ?? "Нужен override"]]));
     html += panel("Payload mappings", kv(Object.entries(webhook.payload ?? {}).map(([key, value]) => [key, value ?? "Не определено"])));
-    html += '<div class="hint-box">Проверка подписи требует точный raw body, signature header и callback secret. После проверки обрабатывается подписанный body. Отсутствующие или неоднозначные status/id paths блокируют callback.</div>';
+    html += '<div class="hint-box">process_callback(payload) обрабатывает разобранный JSON; подлинность уведомления должен проверить HTTP-слой хоста. process_verified_callback(raw_body, headers:) проверяет подпись по исходным байтам, заголовку и callback secret, затем обрабатывает подписанный body. Отсутствующие или неоднозначные status/id paths блокируют callback.</div>';
   } else html += panel("Входящие уведомления", `<div class="empty-inline">${webhook.status === "missing" ? "Webhook не заявлен или не распознан в этой спецификации." : "Выбор webhook-операции требует review."}</div>`, pill(webhook.status));
   html += panel("Ошибки провайдера", table(["Операция", "HTTP", "Коды", "Headers"], manifest.errors.map((error) => [code(error.operation_key), code(error.http_status), code((error.possible_provider_codes ?? []).join(", ") || "Не заявлены"), code((error.headers ?? []).join(", ") || "—")])));
   $("webhook-content").innerHTML = html;

@@ -51,7 +51,7 @@ module IntegrationGenerator
       private
 
       def normalize_schemes(schemes)
-        schemes.map do |name, scheme|
+        normalized = schemes.map do |name, scheme|
           {
             "name" => name,
             "type" => scheme["type"],
@@ -63,16 +63,37 @@ module IntegrationGenerator
             "config_env" => config_env(scheme)
           }
         end
+
+        normalized.group_by { |scheme| scheme["config_env"] }.each_value do |colliding|
+          next if colliding.length == 1
+
+          used = Hash.new(0)
+          colliding.each do |scheme|
+            candidate = config_env(scheme, scheme_name: scheme["name"])
+            used[candidate] += 1
+            scheme["config_env"] = used[candidate] == 1 ? candidate : "#{candidate}_#{used[candidate]}"
+          end
+        end
+        normalized
       end
 
-      def config_env(scheme)
-        suffix = case scheme["type"]
-                 when "api_key" then "API_KEY"
-                 when "http"
-                   scheme["scheme"] == "basic" ? "BASIC_AUTH" : "BEARER_TOKEN"
-                 else "CREDENTIALS"
-                 end
-        "#{@provider_slug.upcase.gsub(/[^A-Z0-9]+/, '_')}_#{suffix}"
+      def config_env(scheme, scheme_name: nil)
+        parts = [@provider_slug.upcase.gsub(/[^A-Z0-9]+/, "_")]
+        if scheme_name
+          token = Support.tokenize(scheme_name).join("_").upcase.gsub(/[^A-Z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
+          parts << (token.empty? ? "SCHEME" : token)
+        end
+        parts << credential_suffix(scheme)
+        parts.join("_")
+      end
+
+      def credential_suffix(scheme)
+        case scheme["type"]
+        when "api_key" then "API_KEY"
+        when "http"
+          scheme["scheme"] == "basic" ? "BASIC_AUTH" : "BEARER_TOKEN"
+        else "CREDENTIALS"
+        end
       end
 
       def default_requirements(document, operations)

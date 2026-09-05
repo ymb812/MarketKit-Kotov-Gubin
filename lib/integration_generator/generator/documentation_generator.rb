@@ -135,6 +135,14 @@ module IntegrationGenerator
           suffix = default["suggested"] ? " (suggested from operation consensus)" : ""
           lines << "Default source: `#{default['source']}`#{suffix}. Generated requests still use per-operation requirements."
         end
+        lines << ""
+        lines << "Per-operation requirements (AND within a group, OR between groups):"
+        @manifest.dig("auth", "operations").each do |operation, configuration|
+          groups = configuration["requirements"] || []
+          description = groups.map { |group| group["schemes"].empty? ? "anonymous" : group["schemes"].join(" AND ") }.join(" OR ")
+          lines << "- `#{Support.escape_markdown(operation)}`: #{Support.escape_markdown(description.empty? ? 'no authentication requirement' : description)}"
+        end
+        lines << "The generated client selects a supported alternative whose credentials are configured; all schemes in an AND group must be configured."
         lines.join("\n")
       end
 
@@ -231,7 +239,11 @@ module IntegrationGenerator
             "- Secret placeholder: `ENV[\"#{@manifest.dig('provider', 'slug').upcase}_WEBHOOK_SECRET\"]`",
             "- Event/status/id paths: `#{payload['event_path'] || 'unknown'}` / `#{payload['status_path'] || 'unknown'}` / `#{payload['provider_operation_id_path'] || 'unknown'}`",
             "",
-            "Cryptographic verification requires the exact raw request body, signature header and configured callback secret. If algorithm or encoding is unknown, generated code fails closed by default; `allow_unverified: true` exists only for explicit inspection/demo parsing."
+            "`process_callback(payload)` accepts a parsed JSON object, as required by the host contract. It maps the payload and returns `signature_verification: :host_required`: the host must authenticate incoming notifications before applying the result. Parsing alone does not verify a signature.",
+            "",
+            "At the HTTP boundary, call `process_verified_callback(raw_body, headers:)` to verify the exact signed bytes and then map that body. It requires the signature header and callback secret, and fails closed when configuration or verification is incomplete. Never re-serialize a parsed Hash to reconstruct signed bytes. Legacy `process_callback` calls with explicit raw_body/headers also use this verification path.",
+            "",
+            "The configured payload status path determines the normalized status; event is returned separately and does not override it. Unknown or unconfirmed statuses remain unknown. Any provider-specific event/status precedence must be reviewed explicitly."
           ]
         )
         lines.join("\n")
@@ -247,7 +259,7 @@ module IntegrationGenerator
       def manual_steps
         lines = ["## Manual configuration and TODOs", ""]
         lines << "- **HOST_CONTRACT**: provide `provider_client.call(method:, url:, headers:, query:, body:)` and the host `Provider::BaseService`/operation model."
-        lines << "- **SAFE_DEFAULTS**: request mappings marked for review and incompletely configured webhook verification fail closed. Use explicit inspection flags only outside production until an override is applied."
+        lines << "- **SAFE_DEFAULTS**: request mappings marked for review and incompletely configured raw-body webhook verification fail closed. Parsed callback processing leaves authentication to the host; do not treat its result as signature verification. Use explicit inspection flags only outside production until an override is applied."
         lines.join("\n")
       end
     end

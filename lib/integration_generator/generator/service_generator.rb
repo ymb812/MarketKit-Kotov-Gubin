@@ -41,7 +41,8 @@ module IntegrationGenerator
                 "operation" => operation && {
                   "key" => operation["key"],
                   "method" => operation["method"],
-                  "path" => operation["path"]
+                  "path" => operation["path"],
+                  "response_statuses" => (operation.dig("contract", "responses") || {}).keys
                 }
               }
             ]
@@ -140,7 +141,8 @@ module IntegrationGenerator
               _logical_gateway_method = request_method
               required_mapping_errors = mappings_for("create_payout").filter_map do |mapping|
                 next unless mapping["required"]
-                next if present?(read_operation_path(operation, mapping["source_candidate"]))
+                value = read_operation_path(operation, mapping["source_candidate"])
+                next if present?(value) || nullable_body_value?(operation, mapping, value)
 
                 {
                   code: "required_field_missing",
@@ -186,12 +188,20 @@ module IntegrationGenerator
               normalize_response(response, "balance")
             end
 
-            def process_callback(payload, headers: {}, raw_body: nil, allow_unverified: false)
+            # The host passes parsed JSON after enforcing its inbound authentication policy.
+            # Mapping a payload alone does not authenticate it; the result makes that explicit.
+            def process_callback(payload, headers: nil, raw_body: nil, allow_unverified: false)
               ensure_detected!("webhook")
-              body = parse_body(payload)
               webhook = ADAPTER_CONFIG.fetch("webhook")
-              verification = verify_webhook_signature(webhook, headers, raw_body)
-              body = parse_body(raw_body) if verification == :verified
+              if raw_body.nil? && headers.nil?
+                raise ArgumentError, "Callback payload must be a parsed JSON object" unless payload.is_a?(Hash)
+
+                body = payload
+                verification = :host_required
+              else
+                verification = verify_webhook_signature(webhook, headers || {}, raw_body)
+                body = parse_body(verification == :verified ? raw_body : payload)
+              end
               if verification == :manual_required && !allow_unverified
                 raise ConfigurationError,
                       "Webhook verification is not fully configured; review the manifest or pass allow_unverified: true only for inspection"
@@ -212,6 +222,11 @@ module IntegrationGenerator
                 signature_verification: verification,
                 raw: body
               }
+            end
+
+            # Use at the HTTP boundary where the original signed bytes are available.
+            def process_verified_callback(raw_body, headers:)
+              process_callback(nil, raw_body: raw_body, headers: headers)
             end
 
             private
@@ -258,8 +273,14 @@ module IntegrationGenerator
                 end
 
                 value = read_operation_path(operation, source)
-                next if value.nil?
-                value = transform_value(mapping, value)
+                if value.nil?
+                  if mapping["required"] && !nullable_body_value?(operation, mapping, value)
+                    raise ArgumentError, "Required provider field #{mapping['target']} is missing"
+                  end
+                  next unless nullable_body_value?(operation, mapping, value)
+                else
+                  value = transform_value(mapping, value)
+                end
                 value = project_to_provider_schema(value, mapping["schema"]) if location == "body"
 
                 case location
@@ -305,21 +326,29 @@ module IntegrationGenerator
               if factor.nil?
                 raise ConfigurationError, "Amount conversion factor requires a reviewed manifest override"
               end
-              numeric = Rational(value.to_s)
+              numeric = begin
+                Rational(value.to_s)
+              rescue ArgumentError, ZeroDivisionError
+                raise ArgumentError, "Amount #{value.inspect} is not an exact numeric value"
+              end
               converted = numeric * factor
               unless converted.denominator == 1
                 raise ArgumentError, "Amount #{value.inspect} cannot be converted to integral provider minor units"
               end
               converted.to_i
-            rescue ArgumentError, ZeroDivisionError
-              raise ArgumentError, "Amount #{value.inspect} is not an exact numeric value"
             end
 
             def apply_auth(request, operation_key)
               auth = ADAPTER_CONFIG.fetch("auth")
               operation_auth = auth.fetch("operations").fetch(operation_key, {})
               requirements = operation_auth["requirements"] || []
-              requirement = requirements.find { |candidate| candidate["supported"] }
+              supported = requirements.select { |candidate| candidate["supported"] }
+              requirement = supported.find do |candidate|
+                candidate.fetch("schemes").all? do |name|
+                  scheme = auth.fetch("schemes").find { |entry| entry["name"] == name }
+                  scheme && present?(ENV[scheme.fetch("config_env")])
+                end
+              end || supported.first
               if requirement.nil? && !requirements.empty?
                 raise ConfigurationError, "No supported authentication alternative for #{operation_key}"
               end
@@ -367,7 +396,12 @@ module IntegrationGenerator
 
             def normalized_success(intent, http_status, headers, body)
               result = { success: true, http_status: http_status, headers: headers, raw: body }
-              response_mappings_for(intent).each do |mapping|
+              response_mappings = response_mappings_for(intent)
+              declared = capability_operation(intent)["response_statuses"] || response_mappings.map { |mapping| mapping["http_status"] }.compact
+              response_key = declared.find { |code| code.to_s == http_status.to_s } ||
+                             declared.find { |code| code.to_s.upcase == "#{http_status.to_s[0]}XX" }
+              response_mappings.each do |mapping|
+                next if mapping["http_status"] && mapping["http_status"].to_s.upcase != response_key.to_s.upcase
                 value = read_payload_path(body, mapping["source"])
                 next if value.nil?
 
@@ -383,8 +417,11 @@ module IntegrationGenerator
 
             def normalized_error(intent, http_status, headers, body)
               operation_key = capability_operation(intent).fetch("key")
-              definition = ADAPTER_CONFIG.fetch("errors").find do |candidate|
+              definition = ADAPTER_CONFIG.fetch("errors").select do |candidate|
                 candidate["operation_key"] == operation_key && status_matches?(candidate["http_status"], http_status)
+              end.min_by do |candidate|
+                declared = candidate["http_status"].to_s.upcase
+                declared == http_status.to_s ? 0 : (declared == "DEFAULT" ? 2 : 1)
               end || {}
 
               {
@@ -532,6 +569,25 @@ module IntegrationGenerator
               read_value_path(operation, path)
             end
 
+            def nullable_body_value?(operation, mapping, value)
+              return false unless value.nil? && (mapping["location"] || "body") == "body" && mapping.dig("schema", "nullable")
+              source = mapping["source_candidate"]
+              return false if source.nil?
+
+              current = operation
+              source.to_s.sub(/\Aoperation\./, "").split(".").each do |segment|
+                if current.is_a?(Hash)
+                  return false unless current.key?(segment) || current.key?(segment.to_sym)
+                  current = current.key?(segment) ? current[segment] : current[segment.to_sym]
+                elsif current.respond_to?(segment)
+                  current = current.public_send(segment)
+                else
+                  return false
+                end
+              end
+              current.nil?
+            end
+
             def read_payload_path(payload, path)
               return nil if path.nil?
 
@@ -599,6 +655,7 @@ module IntegrationGenerator
                 end
 
                 result = properties.each_with_object({}) do |(name, child_schema), projected|
+                  next if child_schema["read_only"]
                   next unless normalized.key?(name)
 
                   projected[name] = project_to_provider_schema(normalized[name], child_schema)
@@ -636,11 +693,13 @@ module IntegrationGenerator
 
               if schema["kind"] == "object" && value.is_a?(Hash)
                 schema.fetch("required", []).each do |name|
+                  next if schema.dig("properties", name, "read_only")
                   unless value.key?(name)
                     raise ArgumentError, "Required provider field #{path}.#{name} is missing"
                   end
                 end
                 schema.fetch("properties", {}).each do |name, child|
+                  next if child["read_only"]
                   validate_required_body!(value[name], child, "#{path}.#{name}") if value.key?(name)
                 end
               elsif schema["kind"] == "array" && value.is_a?(Array)
@@ -671,7 +730,7 @@ module IntegrationGenerator
 
             def status_matches?(declared, actual)
               value = declared.to_s.upcase
-              value == "DEFAULT" || value == actual.to_s || (value.match?(/\A[45]XX\z/) && value[0] == actual.to_s[0])
+              value == "DEFAULT" || value == actual.to_s || (value.match?(/\A[1-5]XX\z/) && value[0] == actual.to_s[0])
             end
 
             def fetch_value(hash, key)

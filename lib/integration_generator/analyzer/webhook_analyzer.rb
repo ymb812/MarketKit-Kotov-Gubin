@@ -112,7 +112,7 @@ module IntegrationGenerator
 
       def extract_payload(operation, warnings)
         _media_type, media = Support.json_content(operation.dig("request_body", "content"))
-        entries = Support.schema_entries(media&.fetch("schema", nil))
+        entries = Support.schema_entries(media&.fetch("schema", nil), direction: :request)
         {
           "event_path" => choose_path(entries, EVENT_FIELDS, "event", warnings),
           "provider_operation_id_path" => choose_path(entries, PROVIDER_ID_FIELDS, "provider operation id", warnings),
@@ -126,7 +126,9 @@ module IntegrationGenerator
         return {} unless event_path
 
         _media_type, media = Support.json_content(operation.dig("request_body", "content"))
-        entry = Support.schema_entries(media&.fetch("schema", nil)).find { |path, _schema| path == event_path }
+        entry = Support.schema_entries(media&.fetch("schema", nil), direction: :request).find do |path, _schema|
+          path == event_path
+        end
         return {} unless entry
 
         entry.last.fetch("enum", []).each_with_object({}) do |event, result|

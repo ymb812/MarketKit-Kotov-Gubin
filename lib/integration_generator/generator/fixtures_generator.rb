@@ -53,7 +53,7 @@ module IntegrationGenerator
       def request_fixture(intent, operation)
         request_body = operation.dig("contract", "request_body")
         _media_type, media = Support.json_media(request_body&.fetch("content", nil))
-        example = media ? Support.example_or_schema(media, path: "request") : nil
+        example = media ? Support.example_or_schema(media, path: "request", direction: :request) : nil
         parameters, parameter_provenance = parameter_fixture(
           intent,
           operation,
@@ -122,7 +122,7 @@ module IntegrationGenerator
         return nil unless response
 
         _media_type, media = Support.json_media(response["content"])
-        example = Support.example_or_schema(media, path: "response")
+        example = Support.example_or_schema(media, path: "response", direction: :response)
         body = example["value"]
         body = body.reject { |key, _value| key == "error" } if success && example["provenance"] == "schema_generated" && body.is_a?(Hash)
         fixture = {
@@ -135,7 +135,7 @@ module IntegrationGenerator
           fixture["scenario"] = "schema_shape_only"
         end
 
-        expected = expected_response(intent, body)
+        expected = success ? expected_response(intent, body, http_status: status) : {}
         expected.delete("normalized_status") if fixture["scenario"] == "schema_shape_only"
         fixture["expected"] = expected unless expected.empty?
         fixture
@@ -143,7 +143,7 @@ module IntegrationGenerator
 
       def select_response(responses, success:)
         candidates = responses.select do |status, _response|
-          success ? status.to_s.match?(/\A2\d\d\z/) : error_status?(status)
+          success ? status.to_s.match?(/\A2(?:\d\d|XX)\z/i) : error_status?(status)
         end
         return [nil, nil] if candidates.empty?
 
@@ -165,11 +165,12 @@ module IntegrationGenerator
         value.casecmp("default").zero? || value.match?(/\A[45](?:\d\d|XX)\z/i)
       end
 
-      def expected_response(intent, body)
+      def expected_response(intent, body, http_status: nil)
         return {} unless body.is_a?(Hash)
 
         mappings = @manifest.dig("field_mappings", intent, "response") || []
         mappings.each_with_object({}) do |mapping, result|
+          next if http_status && mapping["http_status"] && mapping["http_status"] != http_status
           value = Support.dig_path(body, mapping["source"])
           next if value.nil?
 
@@ -192,7 +193,7 @@ module IntegrationGenerator
         request_body = operation.dig("contract", "request_body")
         _media_type, media = Support.json_media(request_body&.fetch("content", nil))
         examples = Support.media_examples(media)
-        examples = [Support.example_or_schema(media, path: "callback")] if examples.empty?
+        examples = [Support.example_or_schema(media, path: "callback", direction: :request)] if examples.empty?
 
         callbacks = examples.map do |example|
           body = example["value"]
@@ -209,6 +210,12 @@ module IntegrationGenerator
         {
           "operation" => operation_identity(operation),
           "callbacks" => callbacks,
+          "processing" => {
+            "method" => "process_callback",
+            "input" => "parsed_json_object",
+            "signature_verification" => "host_required",
+            "verified_method" => "process_verified_callback"
+          },
           "signature" => {
             "header" => @manifest.dig("webhook", "signature", "header"),
             "algorithm" => @manifest.dig("webhook", "signature", "algorithm"),
@@ -229,6 +236,7 @@ module IntegrationGenerator
           "external_id" => Support.dig_path(body, payload["external_id_path"]),
           "provider_status" => provider_status,
           "normalized_status" => normalized == "unknown" ? nil : normalized,
+          "signature_verification" => "host_required",
           "error" => Support.dig_path(body, payload["error_path"])
         }.reject { |_key, value| value.nil? }
       end

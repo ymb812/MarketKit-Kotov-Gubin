@@ -1,0 +1,3 @@
+# The canonical specification hash is part of the manifest provenance and tests.
+# Keep its bytes stable when the repository is cloned with core.autocrlf enabled.
+examples/provider_api.yaml text eol=lf

@@ -42,7 +42,7 @@ module IntegrationGenerator
       def request_schema_entries(operation)
         content = operation.dig("request_body", "content") || {}
         content.flat_map do |media_type, media|
-          schema_entries(media["schema"], prefix: nil).map do |path, schema|
+          schema_entries(media["schema"], prefix: nil, direction: :request).map do |path, schema|
             [path, schema, media_type]
           end
         end
@@ -50,28 +50,43 @@ module IntegrationGenerator
 
       def response_schema_entries(operation)
         operation.fetch("responses", {}).flat_map do |status, response|
+          next [] unless success_response_status?(status)
+
           response.fetch("content", {}).flat_map do |media_type, media|
-            schema_entries(media["schema"], prefix: nil).map do |path, schema|
+            schema_entries(media["schema"], prefix: nil, direction: :response).map do |path, schema|
               [path, schema, status, media_type]
             end
           end
         end
       end
 
-      def schema_entries(schema, prefix: nil)
+      def schema_entries(schema, prefix: nil, direction: nil)
         return [] unless schema.is_a?(Hash)
 
         entries = []
         schema.fetch("properties", {}).each do |name, child|
+          next if excluded_from_direction?(child, direction)
+
           path = [prefix, name].compact.join(".")
           entries << [path, child]
-          entries.concat(schema_entries(child, prefix: path))
+          entries.concat(schema_entries(child, prefix: path, direction: direction))
         end
         if schema["items"].is_a?(Hash)
           item_path = prefix ? "#{prefix}[]" : "[]"
-          entries.concat(schema_entries(schema["items"], prefix: item_path))
+          entries.concat(schema_entries(schema["items"], prefix: item_path, direction: direction))
         end
         entries
+      end
+
+      def success_response_status?(status)
+        status.to_s.match?(/\A(?:2\d\d|2XX)\z/i)
+      end
+
+      def excluded_from_direction?(schema, direction)
+        return false unless schema.is_a?(Hash)
+
+        (direction == :request && schema["read_only"] == true) ||
+          (direction == :response && schema["write_only"] == true)
       end
 
       def request_field_tokens(operation)

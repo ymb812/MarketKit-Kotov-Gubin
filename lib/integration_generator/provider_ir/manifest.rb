@@ -76,6 +76,12 @@ module IntegrationGenerator
       end
 
       def validate_operations!
+        operations.each_with_index do |operation, index|
+          next if operation.is_a?(Hash) || (operation.respond_to?(:key) && operation.respond_to?(:to_h))
+
+          raise ArgumentError, "Manifest operation #{index} must be an object"
+        end
+
         keys = operations.map { |operation| manifest_operation_key(operation) }
         duplicates = keys.tally.select { |_key, count| count > 1 }.keys
         raise ArgumentError, "Duplicate manifest operation keys: #{duplicates.join(', ')}" unless duplicates.empty?
@@ -138,12 +144,44 @@ module IntegrationGenerator
         ensure_type!(auth["schemes"], Array, "auth.schemes")
         ensure_type!(auth["default"], Hash, "auth.default")
         ensure_type!(auth["operations"], Hash, "auth.operations")
-        auth["schemes"].each { |scheme| ensure_type!(scheme, Hash, "auth scheme") }
-        auth["operations"].each_value { |value| ensure_type!(value, Hash, "operation auth") }
+        auth["schemes"].each_with_index do |scheme, index|
+          ensure_type!(scheme, Hash, "auth.schemes.#{index}")
+          ensure_non_empty_string!(scheme["name"], "auth.schemes.#{index}.name")
+          ensure_non_empty_string!(scheme["config_env"], "auth.schemes.#{index}.config_env")
+        end
+        scheme_names = auth["schemes"].map { |scheme| scheme["name"] }
+        duplicate_schemes = scheme_names.tally.select { |_name, count| count > 1 }.keys
+        unless duplicate_schemes.empty?
+          raise ArgumentError, "Duplicate manifest auth schemes: #{duplicate_schemes.join(', ')}"
+        end
+        operation_keys = operations.map { |operation| manifest_operation_key(operation) }
+        missing_auth = operation_keys.reject { |key| auth["operations"].key?(key) }
+        extra_auth = auth["operations"].keys.reject { |key| operation_keys.include?(key) }
+        raise ArgumentError, "Missing operation auth entries: #{missing_auth.join(', ')}" unless missing_auth.empty?
+        raise ArgumentError, "Unknown operation auth entries: #{extra_auth.join(', ')}" unless extra_auth.empty?
+
+        auth["operations"].each do |operation_key, value|
+          ensure_type!(value, Hash, "operation auth #{operation_key}")
+          unless value.key?("requirements")
+            raise ArgumentError, "Manifest auth.operations.#{operation_key}.requirements must be present"
+          end
+          validate_auth_requirements!(
+            value["requirements"],
+            "auth.operations.#{operation_key}.requirements",
+            scheme_names
+          )
+        end
+        unless auth["default"].key?("requirements")
+          raise ArgumentError, "Manifest auth.default.requirements must be present"
+        end
+        validate_auth_requirements!(auth["default"]["requirements"], "auth.default.requirements", scheme_names)
 
         status_mapping = @attributes["status_mapping"]
         ensure_type!(status_mapping["fields"], Array, "status_mapping.fields")
         ensure_type!(status_mapping["mappings"], Hash, "status_mapping.mappings")
+        status_mapping["mappings"].each do |provider_status, mapping|
+          ensure_type!(mapping, Hash, "status_mapping.mappings.#{provider_status}")
+        end
 
         required_field_mappings = %w[create_payout fetch_status cancel_payout]
         missing = required_field_mappings.reject { |intent| @attributes["field_mappings"].key?(intent) }
@@ -152,12 +190,24 @@ module IntegrationGenerator
           ensure_type!(mapping, Hash, "field_mappings.#{intent}")
           ensure_type!(mapping["request"], Array, "field_mappings.#{intent}.request")
           ensure_type!(mapping["response"], Array, "field_mappings.#{intent}.response")
+          mapping["request"].each_with_index do |field, index|
+            ensure_type!(field, Hash, "field_mappings.#{intent}.request.#{index}")
+          end
+          mapping["response"].each_with_index do |field, index|
+            ensure_type!(field, Hash, "field_mappings.#{intent}.response.#{index}")
+          end
         end
 
         transformations = @attributes["transformations"]
         ensure_type!(transformations["amount"], Hash, "transformations.amount")
         ensure_type!(transformations["conditional_requirements"], Array, "transformations.conditional_requirements")
-        @attributes["servers"].each { |server| ensure_type!(server, Hash, "server") }
+        transformations["conditional_requirements"].each_with_index do |requirement, index|
+          ensure_type!(requirement, Hash, "transformations.conditional_requirements.#{index}")
+        end
+        @attributes["servers"].each_with_index do |server, index|
+          ensure_type!(server, Hash, "server")
+          ensure_type!(server["variables"], Hash, "servers.#{index}.variables") if server.key?("variables")
+        end
         @attributes["errors"].each { |error| ensure_type!(error, Hash, "error mapping") }
         @attributes["warnings"].each { |warning| ensure_type!(warning, Hash, "warning") }
         unless @attributes["unsupported_operations"].all? { |key| key.is_a?(String) }
@@ -168,8 +218,32 @@ module IntegrationGenerator
         unless CAPABILITY_STATUSES.include?(webhook_status)
           raise ArgumentError, "Unknown webhook status #{webhook_status.inspect}"
         end
+        if webhook_status == "detected"
+          ensure_type!(@attributes.dig("webhook", "signature"), Hash, "webhook.signature")
+          ensure_type!(@attributes.dig("webhook", "payload"), Hash, "webhook.payload")
+        end
 
         validate_overrides! if @attributes.key?("overrides")
+      end
+
+      def validate_auth_requirements!(requirements, name, scheme_names)
+        return if requirements.nil?
+
+        ensure_type!(requirements, Array, name)
+        requirements.each_with_index do |requirement, index|
+          ensure_type!(requirement, Hash, "#{name}.#{index}")
+          ensure_type!(requirement["schemes"], Array, "#{name}.#{index}.schemes")
+          unless requirement["schemes"].all? { |scheme| scheme.is_a?(String) && !scheme.empty? }
+            raise ArgumentError, "Manifest #{name}.#{index}.schemes must contain non-empty strings"
+          end
+          unless requirement["supported"] == true || requirement["supported"] == false
+            raise ArgumentError, "Manifest #{name}.#{index}.supported must be a boolean"
+          end
+          unknown = requirement["schemes"].reject { |scheme| scheme_names.include?(scheme) }
+          if requirement["supported"] && !unknown.empty?
+            raise ArgumentError, "Manifest #{name}.#{index} marks unknown auth schemes as supported: #{unknown.join(', ')}"
+          end
+        end
       end
 
       def validate_overrides!
@@ -230,6 +304,12 @@ module IntegrationGenerator
         return if value.is_a?(type)
 
         raise ArgumentError, "Manifest #{name} must be a #{type}"
+      end
+
+      def ensure_non_empty_string!(value, name)
+        return if value.is_a?(String) && !value.empty?
+
+        raise ArgumentError, "Manifest #{name} must be a non-empty string"
       end
 
       def serialize(value)

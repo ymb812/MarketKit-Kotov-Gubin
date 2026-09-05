@@ -14,7 +14,9 @@ module IntegrationGenerator
         %w[card_number pan] => ["recipient_card", "operation.payout_requisite.card_number", 0.6],
         %w[iban account_number] => ["recipient_account", "operation.payout_requisite.account", 0.6]
       }.freeze
-      ID_PARAMETER_NAMES = %w[id payout_id transfer_id transaction_id operation_id].freeze
+      ID_PARAMETER_NAMES = %w[
+        id payout_id transfer_id transaction_id operation_id withdrawal_id disbursement_id remittance_id
+      ].freeze
       IDEMPOTENCY_PARAMETER_NAMES = %w[idempotency_key idempotency_token].freeze
 
       RESPONSE_ROLES = {
@@ -74,8 +76,8 @@ module IntegrationGenerator
         return { "status" => "missing", "operation_key" => nil, "request" => [], "response" => [] } unless operation
 
         candidates = operation.fetch("parameters", []).filter_map do |parameter|
-          tokens = Support.tokenize(parameter["name"])
-          next unless Support.intersection?(tokens, ID_PARAMETER_NAMES)
+          normalized_name = Support.tokenize(parameter["name"]).join("_")
+          next unless ID_PARAMETER_NAMES.include?(normalized_name)
 
           confidence = parameter["in"] == "path" ? 0.95 : 0.75
           {
@@ -84,6 +86,7 @@ module IntegrationGenerator
             "location" => parameter["in"],
             "source_candidate" => "operation.provider_operation_id",
             "required" => parameter["required"],
+            "schema" => Support.compact_schema(parameter["schema"]),
             "confidence" => confidence,
             "provenance" => "inferred",
             "requires_review" => confidence < 0.8,
@@ -97,6 +100,11 @@ module IntegrationGenerator
             location: "#/field_mappings/#{intent}/request"
           )
         elsif candidates.length > 1
+          candidates.each do |candidate|
+            candidate["confidence"] = [candidate["confidence"], 0.75].min
+            candidate["requires_review"] = true
+            candidate["evidence"] = "multiple payout operation identifier parameters require explicit review"
+          end
           warnings << Support.warning(
             "AMBIGUOUS_PROVIDER_OPERATION_ID_MAPPING",
             "Multiple provider operation id parameter candidates were found for '#{intent}'",
@@ -104,17 +112,34 @@ module IntegrationGenerator
           )
         end
 
+        unmapped = operation.fetch("parameters", []).reject do |parameter|
+          candidates.any? { |candidate| candidate["target"] == parameter["name"] && candidate["location"] == parameter["in"] }
+        end.map do |parameter|
+          warnings << Support.warning(
+            "REQUEST_PARAMETER_MAPPING_NOT_FOUND",
+            "No internal source mapping was inferred for #{parameter['in']} parameter '#{parameter['name']}'",
+            location: "#/field_mappings/#{intent}/request/#{parameter['name']}"
+          )
+          {
+            "role" => "unmapped_parameter", "target" => parameter["name"], "location" => parameter["in"],
+            "source_candidate" => nil, "required" => parameter["required"],
+            "schema" => Support.compact_schema(parameter["schema"]), "confidence" => 0.0,
+            "provenance" => "inferred", "requires_review" => true,
+            "evidence" => "no generic operation parameter rule matched"
+          }
+        end
+
         {
           "status" => capability["status"],
           "operation_key" => Support.operation_key(operation),
-          "request" => candidates,
+          "request" => candidates + unmapped,
           "response" => response_mappings(operation)
         }
       end
 
       def request_mappings(schema, warnings)
         required = required_paths(schema)
-        mappings = Support.schema_entries(schema).filter_map do |path, child|
+        mappings = Support.schema_entries(schema, direction: :request).filter_map do |path, child|
           rule = role_rule(path)
           next unless rule
 
@@ -135,6 +160,7 @@ module IntegrationGenerator
 
         top_level_required = schema.is_a?(Hash) ? schema.fetch("required", []) : []
         top_level_required.each do |name|
+          next if schema.dig("properties", name, "read_only") == true
           next if mappings.any? { |mapping| mapping["target"] == name }
 
           child = schema.dig("properties", name)
@@ -203,24 +229,24 @@ module IntegrationGenerator
       end
 
       def response_mappings(operation)
-        success = operation.fetch("responses", {}).find { |status, _response| status.to_s.match?(/\A2\d\d\z/) }
-        return [] unless success
+        operation.fetch("responses", {}).flat_map do |status, response|
+          next [] unless Support.success_response_status?(status)
 
-        status, response = success
-        _media_type, media = Support.json_content(response["content"])
-        Support.schema_entries(media&.fetch("schema", nil)).filter_map do |path, child|
-          rule = response_role(path)
-          next unless rule
+          _media_type, media = Support.json_content(response["content"])
+          Support.schema_entries(media&.fetch("schema", nil), direction: :response).filter_map do |path, child|
+            rule = response_role(path)
+            next unless rule
 
-          role, confidence = rule
-          {
-            "role" => role,
-            "source" => path,
-            "http_status" => status,
-            "schema" => Support.compact_schema(child),
-            "confidence" => confidence,
-            "provenance" => "inferred"
-          }
+            role, confidence = rule
+            {
+              "role" => role,
+              "source" => path,
+              "http_status" => status,
+              "schema" => Support.compact_schema(child),
+              "confidence" => confidence,
+              "provenance" => "inferred"
+            }
+          end
         end
       end
 
@@ -284,7 +310,7 @@ module IntegrationGenerator
       end
 
       def conditional_requirements(schema, warnings)
-        Support.schema_entries(schema).filter_map do |path, child|
+        Support.schema_entries(schema, direction: :request).filter_map do |path, child|
           description = child["description"].to_s
           match = description.match(/(?:обязател(?:ен|ьна|ьно)|required(?:\s+only)?)[^=]*(?:для|when|for)\s+([a-zA-Z0-9_.-]+)\s*=\s*([a-zA-Z0-9_.-]+)/i)
           next unless match

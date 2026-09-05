@@ -46,7 +46,7 @@ module IntegrationGenerator
         end
       end
 
-      def schema_fixture(schema, path: "value")
+      def schema_fixture(schema, path: "value", direction: nil)
         return nil unless schema.is_a?(Hash)
         return deep_copy(schema["example"]) unless schema["example"].nil?
         return deep_copy(schema["default"]) unless schema["default"].nil?
@@ -59,10 +59,12 @@ module IntegrationGenerator
           selected = required.empty? ? properties.keys : required
           selected.each_with_object({}) do |name, result|
             child = properties[name]
-            result[name] = schema_fixture(child, path: [path, name].join(".")) if child
+            next if child && ((direction == :request && child["read_only"]) || (direction == :response && child["write_only"]))
+
+            result[name] = schema_fixture(child, path: [path, name].join("."), direction: direction) if child
           end
         when "array"
-          [schema_fixture(schema["items"], path: "#{path}[]")]
+          [schema_fixture(schema["items"], path: "#{path}[]", direction: direction)]
         when "integer"
           schema.dig("constraints", "minimum") || 0
         when "number"
@@ -80,13 +82,13 @@ module IntegrationGenerator
         end
       end
 
-      def example_or_schema(media, path: "value")
+      def example_or_schema(media, path: "value", direction: nil)
         example = media_examples(media).first
         return example if example
 
         {
           "name" => nil,
-          "value" => schema_fixture(media&.fetch("schema", nil), path: path),
+          "value" => schema_fixture(media&.fetch("schema", nil), path: path, direction: direction),
           "provenance" => "schema_generated"
         }
       end

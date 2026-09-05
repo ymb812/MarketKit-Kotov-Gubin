@@ -85,13 +85,14 @@ class GeneratedServiceContractTest < Minitest::Test
       "external_id" => "op_1",
       "status" => "completed"
     }
-    assert_raises(Provider::NovapayService::ConfigurationError) { service.process_callback(payload) }
-
-    result = service.process_callback(payload, allow_unverified: true)
+    result = service.process_callback(payload)
 
     assert_equal "np_1", result[:provider_operation_id]
     assert_equal :unknown, result[:status], "Inspection does not confirm status semantics"
-    assert_equal :manual_required, result[:signature_verification]
+    assert_equal :host_required, result[:signature_verification]
+    assert_raises(Provider::NovapayService::ConfigurationError) do
+      service.process_verified_callback(JSON.generate(payload), headers: {})
+    end
   end
 
   def test_confirmed_canonical_conditional_rule_requires_bank_code_for_sbp
@@ -113,6 +114,27 @@ class GeneratedServiceContractTest < Minitest::Test
     assert_equal 1, errors.length
     assert_equal "conditional_required_field_missing", errors.first.fetch(:code)
     assert_equal "operation.payout_requisite.bank_code", errors.first.fetch(:field)
+  end
+
+  def test_parsed_callback_contract_does_not_claim_transport_authentication
+    artifacts = canonical_artifacts(overridden: true)
+    remove_generated_service(:NovapayService)
+    eval(artifacts.fetch("novapay_service.rb"), TOPLEVEL_BINDING, "generated/novapay_service.rb")
+    service = Provider::NovapayService.new
+    payload = { "payout_id" => "np_1", "status" => "completed", "event" => "payout.failed" }
+
+    result = service.process_callback(payload)
+
+    assert_equal "np_1", result[:provider_operation_id]
+    assert_equal :approved, result[:status], "The configured payload status path controls the mapping, not event"
+    assert_equal "payout.failed", result[:event]
+    assert_equal :host_required, result[:signature_verification]
+    assert_equal payload, result[:raw]
+    assert_raises(ArgumentError) { service.process_callback(JSON.generate(payload)) }
+    assert_includes artifacts.fetch("INTEGRATION.md"), "process_verified_callback(raw_body, headers:)"
+    fixtures = JSON.parse(artifacts.fetch("fixtures.json"))
+    assert_equal "host_required", fixtures.dig("fixtures", "webhook", "callbacks", 0, "expected", "signature_verification")
+    assert_equal "parsed_json_object", fixtures.dig("fixtures", "webhook", "processing", "input")
   end
 
   def test_overridden_service_needs_no_mapping_escape_hatch_and_verifies_hex_webhook
@@ -145,14 +167,16 @@ class GeneratedServiceContractTest < Minitest::Test
     )
     ENV["NOVAPAY_WEBHOOK_SECRET"] = "callback-secret"
     signature = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("NOVAPAY_WEBHOOK_SECRET"), raw_body)
-    result = service.process_callback(
+    result = service.process_verified_callback(
       raw_body,
-      headers: { "X-NovaPay-Signature" => signature },
-      raw_body: raw_body
+      headers: { "X-NovaPay-Signature" => signature }
     )
 
     assert_equal :verified, result[:signature_verification]
     assert_equal :approved, result[:status]
+    assert_raises(Provider::NovapayService::ProviderError) do
+      service.process_verified_callback(raw_body + " ", headers: { "X-NovaPay-Signature" => signature })
+    end
     assert_raises(ArgumentError) do
       service.process_callback(raw_body, headers: { "X-NovaPay-Signature" => signature })
     end

@@ -28,7 +28,7 @@ module IntegrationGenerator
           Manifest.new(deep_stringify_keys(parsed))
         rescue JSON::ParserError, Psych::Exception, EncodingError => e
           raise Error.new("MANIFEST_PARSE_ERROR", e.message, location: path)
-        rescue ArgumentError, KeyError => e
+        rescue ArgumentError, KeyError, NoMethodError, TypeError => e
           raise Error.new("MANIFEST_INVALID", e.message, location: path)
         rescue Errno::EACCES => e
           raise Error.new("MANIFEST_NOT_READABLE", e.message, location: path)

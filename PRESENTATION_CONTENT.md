@@ -53,7 +53,7 @@
 ## Слайд 6. Качество: какие проверки действительно выполнены
 
 - **Мысль:** разделять синтаксис артефактов, runtime contract tests и будущее подключение.
-- **Показать:** 96 tests / 609 assertions; три demo providers + `ruby -c`; список тестируемого runtime поведения.
+- **Показать:** 123 tests / 749 assertions после этапа 2; три demo providers + `ruby -c`; список тестируемого runtime поведения. Детали и границы Windows smoke — REVIEW_REPORT.md.
 - **Сказать:** «Тесты проверяют запросы, преобразования, auth, статусы, ошибки и callbacks с host test double. Перед записью валидируются артефакты. Реальный sandbox требует окружения и credentials и не входит в доказанный результат».
 - **Критерий:** качество реализации — 10; сервис/преобразования.
 - **Evidence:** `test/generator/generated_service_contract_test.rb`, `alt_withdrawal_service_contract_test.rb`, `review_regressions_test.rb`, `output_writer_test.rb`; фактическая проверка browser upload/download описана в guide.
@@ -64,7 +64,7 @@
 - **Показать:** четыре конкретных примера: idempotency source, HMAC/raw body, schema projection host-полей, provenance/audit.
 - **Сказать:** «Показываем не общие слова о надёжности, а поведение: явный источник ключа идемпотентности, проверку подписи, ограничение исходящего payload и историю подтверждений».
 - **Критерий:** отраслевые дополнительные преимущества — 6; полнота — 8.
-- **Evidence:** generated `verify_webhook_signature`, `secure_compare`, `project_to_provider_schema`, `validate_required_body!`; mappings и audit. Idempotency header не означает глобальную гарантию exactly-once; HMAC не означает security certification.
+- **Evidence:** generated `process_verified_callback`, `verify_webhook_signature`, `secure_compare`, `project_to_provider_schema`, `validate_required_body!`; mappings и audit. Parsed `process_callback` возвращает `host_required`, не утверждает проверку подписи. Idempotency header не означает глобальную гарантию exactly-once; HMAC не означает security certification.
 
 ## Слайд 8. Итог и граница готовности
 
