@@ -94,7 +94,7 @@ bundle exec ruby bin/serve
 
 UI работает поверх того же Ruby pipeline; JavaScript только отображает manifest и отправляет локальные запросы. WEBrick устанавливается через `bundle install`; Node.js, сборка frontend, CDN и внешние API не нужны. Сервер слушает только `127.0.0.1`; это однопользовательский локальный инструмент, не публичный hosted service.
 
-Подробный сценарий: [DEMO_GUIDE.md](DEMO_GUIDE.md). Готовый текст третьего чекпоинта и отдельно помеченный будущий storyboard: [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md). Оба документа входят в Git.
+Подробный сценарий: [DEMO_GUIDE.md](DEMO_GUIDE.md). Готовый устный текст третьего чекпоинта и монтажная карта к этому сценарию: [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md). Оба документа входят в Git.
 
 Короткий сценарий показа:
 
@@ -122,15 +122,15 @@ bundle exec ruby bin/demo
 bundle exec ruby bin/demo --output output/presentation-run
 ```
 
-Сценарий экранного видео и устного рассказа для третьего чекпоинта привязан к критериям кейса. Ниже — рабочая раскладка на четыре минуты; фактическую длительность нужно сверить перед записью:
+Сценарий экранного видео и устного рассказа для третьего чекпоинта привязан к критериям кейса. **TIMING TODO:** точный лимит ещё не подтверждён; длительность нельзя фиксировать до ответа модератора и синхронного прогона текста по готовому видео. Порядок кадров остаётся таким:
 
-| Время | Тезис и доказательство | Критерий экспертов |
+| Кадр | Тезис и доказательство | Критерий экспертов |
 |---|---|---|
-| 0:00–0:30 | Из OpenAPI получаем заготовку payout-интеграции; показать официальный вход | Разбор API — 20 |
-| 0:30–1:20 | Запустить `bin/demo`, открыть service, показать запрос, auth и обработку ответа | Генерация сервиса — 25 |
-| 1:20–2:10 | Показать amount conversion, status mappings и условный `bank_code`; неподтверждённые статусы остаются `unknown` | Преобразование данных — 15 |
-| 2:10–3:00 | Сравнить три спеки и `fetch_status: requires_review -> detected` после JSON override | Универсальность — 15 |
-| 3:00–4:00 | Открыть docs/fixtures/report, показать тесты и manifest как общий источник артефактов | Понятность — 15; качество реализации — 10 |
+| 1 | Из OpenAPI получаем заготовку payout-интеграции; показать официальный вход | Разбор API — 20 |
+| 2 | Открыть service, показать запрос, auth и обработку ответа | Генерация сервиса — 25 |
+| 3 | Показать amount conversion, status mappings и условный `bank_code`; неподтверждённые статусы остаются `unknown` | Преобразование данных — 15 |
+| 4 | Сравнить три спеки и `fetch_status: requires_review -> detected` после JSON override | Универсальность — 15 |
+| 5 | Открыть docs/fixtures/report, показать тесты и manifest как общий источник артефактов | Понятность — 15; качество реализации — 10 |
 
 Эти числа — веса критериев, а не самооценка решения. Время ручной production-интеграции не измерялось: демонстрация доказывает генерацию и локальные проверки заготовки. `NEEDS REVIEW` из-за callback secret объясняем как явную настройку credentials. Payout Studio показывает тот же pipeline через визуальные экраны; CLI можно держать открытым как резерв.
 
@@ -353,4 +353,4 @@ node --test test/web/frontend_test.js
 
 ## Статус
 
-Матрица, ревью, документация и поздняя contract/remediation-итерация завершены. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 134 tests / 792 assertions; frontend logic — 7/7; три demo bundles, manifest-only byte match, браузерные `oneOf`/broken-ref переходы и Windows HTTP generation/download из Unicode-пути проверены. Следующий этап перед третьим чекпоинтом — итоговое readiness-review: задачи, текст рассказа, вопросы/долг, Markdown-состав и полный рабочий flow. На чекпоинте включается экранное видео, поверх которого команда рассказывает подготовленный текст; slide deck сейчас не нужен. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.
+Матрица, ревью, документация, contract/remediation-итерация и итоговое readiness-review завершены с вердиктом **GO**. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 134 tests / 792 assertions; frontend logic — 7/7; три demo bundles, manifest-only byte match, браузерные `oneOf`/broken-ref переходы, generation/download и Windows HTTP flow из Unicode-пути проверены. До третьего чекпоинта остались ручные запись/экспорт экранного видео, проверка звука и один синхронный прогон текста; slide deck не нужен. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.

@@ -212,6 +212,6 @@ Transfer-вариант важен именно неполнотой: отсут
 | Установка, команды, UI, overrides и supported subset | [README.md](README.md) |
 | Модули, их входы/выходы, зависимости и расширение | [MODULE_MAP.md](MODULE_MAP.md) |
 | Пошаговая live-демонстрация и резервный CLI-сценарий | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
-| Связный текст третьего чекпоинта и отдельный будущий storyboard | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
+| Устный текст третьего чекпоинта и монтажная карта | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
 
 Рабочие планы, матрица ревью, review report и файлы из `docs/` не нужны для воспроизведения результата: все актуальные claims, команды, ссылки и границы собраны в этом руководстве. Внутренние материалы можно хранить локально вне judge-facing набора.

@@ -1,8 +1,10 @@
 # Payout Studio — guide для защиты
 
-Актуально на 6 сентября 2026. Для третьего чекпоинта этот сценарий записывается как экранное видео; команда рассказывает текст из `PRESENTATION_CONTENT.md` на его фоне. Slide deck не нужен. Основной видеоряд — локальный UI, CLI остаётся резервом. План рассчитан примерно на 5–6 минут; перед записью его нужно ужать под фактический лимит.
+Актуально на 6 сентября 2026. Для третьего чекпоинта этот сценарий записывается как экранное видео; команда рассказывает текст из `PRESENTATION_CONTENT.md` на его фоне. Slide deck не нужен. Основной видеоряд — локальный UI, CLI остаётся резервом.
 
-## Вводная: 20 секунд
+> **TIMING TODO:** запросить у модератора точный лимит, записать связный видеоряд в указанном ниже порядке и один раз синхронно прочитать весь текст. После этого сокращать кадры и реплики вместе; не назначать длительность заранее.
+
+## Вводная
 
 «При подключении платёжного провайдера разработчик вручную переводит его API в контракт своего приложения. По условию кейса такая работа занимает 2–5 дней. Мы принимаем OpenAPI YAML или JSON и создаём заготовку Ruby payout-интеграции: сервис, инструкцию, примеры и проверяемую историю решений. Сейчас покажем путь от входного файла до скачанного пакета».
 
@@ -29,13 +31,13 @@ bundle exec ruby bin/demo
 
 | Шаг | Что показываем и делаем | Что говорим | Критерий и evidence |
 |---|---|---|---|
-| 1. OpenAPI, 30 сек | В «Обзоре» виден автоматически проанализированный canonical demo и имя `provider_api.yaml`. Нажать «Открыть OpenAPI» и показать `paths`, schemas, security. | «Вход — структурированная спецификация, не вручную заполненная анкета интеграции». | Разбор API: `examples/provider_api.yaml`, parser и Generic IR. |
-| 2. Анализ, 40 сек | Вернуться в «Обзор», нажать «Проверить решения». Пять capabilities, endpoints, раскрыть одно «Почему выбрана эта операция». Показать восемь предупреждений и групповые счётчики. | «Структура извлекается автоматически. Reviewable решения, ручная настройка и ограничения получают разные действия». | Parsing / универсальность / UX: manifest, classifier и backend remediation metadata. Confidence — оценка правил, не вероятность production-корректности. |
-| 3. Review, 50 сек | «Открыть overrides»: просмотреть подготовленный YAML. Включить «Применить overrides при следующем анализе», нажать «Анализировать». Возврат в обзор: 18 изменений, warnings 8 → 1. Оставшаяся кнопка ведёт в «Подключение», а не в overrides. | «Открытие файла ничего не подтверждает. Повторный анализ применяет конкретные решения; callback secret задаётся в окружении приложения». | Generic overrides, audit и честная remediation. NEEDS REVIEW остаётся; applied не означает полностью reviewed. |
-| 4. Manifest и mappings, 50 сек | «Manifest, audit и готовность»: открыть текущий manifest, историю решений и отчёт совместимости. В «Преобразованиях» показать ×100, статусы и условные требования перед длинными таблицами. | «Один final manifest питает все генераторы. Здесь видно, что изменилось и почему. Сумма, статусы и обязательные поля становятся поведением адаптера». | Преобразования данных: `amount_unit`, status/field mappings, `required_if`, source/reason и before/after audit. |
-| 5. Generated integration, 60 сек | «Сгенерировать пакет». В Ruby перейти к `create_request`, затем `process_callback`. Показать `success(result: { id: ... })`, `failure`, `approve_operation` / `reject_operation`. Открыть `INTEGRATION.md`, `fixtures.json`, report и скачать `.tar.gz`. | «Generated service следует платформенному контракту: id возвращается из create, terminal status меняют helpers». | Пять файлов из одного manifest; dropdown ведёт к реальным методам. |
-| 6. Универсальность, 50 сек | Выбрать transfer: JSON, Bearer, две возможности и три не заявленные. Затем withdrawal: YAML, Basic, nested payload; применить JSON override: 4 → 5 capabilities, 11 → 1 warnings. | «Другие имена, структуры и auth проходят тот же pipeline. Отсутствующие операции не выдумываются». | Две самостоятельные alternative fixtures, один generic core. |
-| 7. Validation и итог, 30 сек | Показать пояснение проверок на экране артефактов и успешный `bin/demo` в резервном терминале. | «До сохранения проверяем manifest, fixtures и Ruby-синтаксис. Тесты исполняют request/response/callback контракты. Для реального подключения остаются credentials, host boundary и sandbox». | Качество реализации: validators/writer, contract tests. `ruby -c` не доказывает связь с реальным провайдером. |
+| 1. OpenAPI | В «Обзоре» виден автоматически проанализированный canonical demo и имя `provider_api.yaml`. Нажать «Открыть OpenAPI» и показать `paths`, schemas, security. | «Вход — структурированная спецификация, не вручную заполненная анкета интеграции». | Разбор API: `examples/provider_api.yaml`, parser и Generic IR. |
+| 2. Анализ | Вернуться в «Обзор», нажать «Проверить решения». Пять capabilities, endpoints, раскрыть одно «Почему выбрана эта операция». Показать восемь предупреждений и групповые счётчики. | «Структура извлекается автоматически. Reviewable решения, ручная настройка и ограничения получают разные действия». | Parsing / универсальность / UX: manifest, classifier и backend remediation metadata. Confidence — оценка правил, не вероятность production-корректности. |
+| 3. Review | «Открыть overrides»: просмотреть подготовленный YAML. Включить «Применить overrides при следующем анализе», нажать «Анализировать». Возврат в обзор: 18 изменений, warnings 8 → 1. Оставшаяся кнопка ведёт в «Подключение», а не в overrides. | «Открытие файла ничего не подтверждает. Повторный анализ применяет конкретные решения; callback secret задаётся в окружении приложения». | Generic overrides, audit и честная remediation. NEEDS REVIEW остаётся; applied не означает полностью reviewed. |
+| 4. Manifest и mappings | «Manifest, audit и готовность»: открыть текущий manifest, историю решений и отчёт совместимости. В «Преобразованиях» показать ×100, статусы и условные требования перед длинными таблицами. | «Один final manifest питает все генераторы. Здесь видно, что изменилось и почему. Сумма, статусы и обязательные поля становятся поведением адаптера». | Преобразования данных: `amount_unit`, status/field mappings, `required_if`, source/reason и before/after audit. |
+| 5. Generated integration | «Сгенерировать пакет». В Ruby перейти к `create_request`, затем `process_callback`. Показать `success(result: { id: ... })`, `failure`, `approve_operation` / `reject_operation`. Открыть `INTEGRATION.md`, `fixtures.json`, report и скачать `.tar.gz`. | «Generated service следует платформенному контракту: id возвращается из create, terminal status меняют helpers». | Пять файлов из одного manifest; dropdown ведёт к реальным методам. |
+| 6. Универсальность | Выбрать transfer: JSON, Bearer, две возможности и три не заявленные. Затем withdrawal: YAML, Basic, nested payload; применить JSON override: 4 → 5 capabilities, 11 → 1 warnings. | «Другие имена, структуры и auth проходят тот же pipeline. Отсутствующие операции не выдумываются». | Две самостоятельные alternative fixtures, один generic core. |
+| 7. Validation и итог | Показать пояснение проверок на экране артефактов и успешный `bin/demo` в резервном терминале. | «До сохранения проверяем manifest, fixtures и Ruby-синтаксис. Тесты исполняют request/response/callback контракты. Для реального подключения остаются credentials, host boundary и sandbox». | Качество реализации: validators/writer, contract tests. `ruby -c` не доказывает связь с реальным провайдером. |
 
 ## Показ реальной загрузки файла
 
@@ -73,9 +75,9 @@ bundle exec ruby bin/demo
 ## Последняя проверка текущей версии
 
 - Ruby suite: **134 tests, 792 assertions**, без failures/errors/skips; frontend logic: **7/7**, `node --check` — PASS.
-- `bin/demo`: три providers с пятью артефактами каждый, `ruby -c` успешен; прогон `output/v6-final-20260906-100623/`.
+- `bin/demo`: три providers с пятью артефактами каждый, `ruby -c` успешен; предфинальный прогон `output/prefinal-20260906-105139/`.
 - Manifest-only replay: все пять файлов NovaPay побайтово совпали по SHA-256 с bundle из OpenAPI.
-- Browser: canonical override оставляет только callback-secret настройку; `oneOf` показывается один раз как ограничение без CTA в Overrides и выделяет строку 278; broken `$ref` выделяет точное вхождение на строке 42.
+- Browser: canonical override оставляет только callback-secret настройку; generation/download совпали по пяти файлам; `oneOf` показывается как ограничение без CTA в Overrides, а broken `$ref` ведёт к точному исходному фрагменту.
 - Windows: из корня `HackGenesis проверка 20260906-1010` запущен локальный HTTP server; сгенерированы пять файлов, Ruby и tar.gz скачаны с HTTP 200, байты Ruby совпали с API artifact.
 - Автоматизация проверена во встроенном браузере Codex. **Отдельный Chrome не подключён и не считается проверенным.** Для третьего чекпоинта достаточно проверить фактический браузер записи и итоговый видеофайл; проектор и slide deck относятся к возможной финальной защите.
 
