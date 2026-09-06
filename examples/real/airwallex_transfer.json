@@ -1,0 +1,3455 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Airwallex Client Api Documentation",
+    "description": "Airwallex Client Api Documentation",
+    "version": "2026-08-21",
+    "termsOfService": "https://www.airwallex.com/terms",
+    "contact": {},
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.airwallex.com",
+      "description": "Production"
+    },
+    {
+      "url": "https://api.sandbox.airwallex.com",
+      "description": "Sandbox"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Account Capability > Account Capability",
+      "description": "The Account Capability resource represents capabilities you can enable or query on your Airwallex account like accepting card payments or making fund transfers.",
+      "x-displayName": "Account Capability"
+    },
+    {
+      "name": "Accounting > General Ledger Accounts",
+      "description": "Manages General Ledger (GL) account entries used when coding Airwallex Spend transactions, such as expenses and bills.",
+      "x-displayName": "General Ledger Accounts"
+    },
+    {
+      "name": "Accounting > Tax Codes",
+      "description": "Manages tax codes used when coding Airwallex Spend transactions, such as expenses and bills.",
+      "x-displayName": "Tax Codes"
+    },
+    {
+      "name": "Accounting > Accounting Fields",
+      "description": "Manages custom accounting fields that define additional accounting dimensions for Airwallex Spend, such as projects or cost centers.",
+      "x-displayName": "Accounting Fields"
+    },
+    {
+      "name": "Accounting > Accounting Field Values",
+      "description": "Manages selectable values for custom accounting fields used when coding Airwallex Spend transactions.",
+      "x-displayName": "Accounting Field Values"
+    },
+    {
+      "name": "Authentication > Embedded Components",
+      "description": "Authorize to use embedded components.",
+      "x-displayName": "Embedded Components"
+    },
+    {
+      "name": "Authentication > Authentication",
+      "description": "Airwallex uses an API key and Client ID to authenticate requests, keys are managed via the Airwallex Webapp. Do not share your API keys in publicly accessible areas such as GitHub, client-side code, and so forth.\n\nAll API requests must be made over HTTPS. Only [PCI-DSS recommended TLS versions and cipher suites](/docs/developer-tools/security/securing-connections-to-airwallex) are supported.",
+      "x-displayName": "API Access Token"
+    },
+    {
+      "name": "Billing > Credit Notes",
+      "description": "Issue a Credit Note to adjust the amount of a finalized invoice.",
+      "x-displayName": "Credit Notes"
+    },
+    {
+      "name": "Billing > Billing Checkouts",
+      "description": "A Billing Checkout manages the setup and lifecycle of an Airwallex-hosted customer checkout experience, enabling customers to confirm and pay for line items or set up payment details for future transactions.  \nWe recommend creating a new Billing Checkout each time a customer initiates a purchase. After the customer successfully completes the checkout, resources such as Customer, Payment Source, and Subscription will be automatically created in the Billing Checkout object.",
+      "x-displayName": "Billing Checkouts"
+    },
+    {
+      "name": "Billing > Billing Customers",
+      "description": "A Billing Customer is an individual or business who purchases or subscribes to your products or services.",
+      "x-displayName": "Billing Customers"
+    },
+    {
+      "name": "Billing > Billing Transactions",
+      "description": "A Billing Transaction describes a transaction on your invoice such as a payment or refund.",
+      "x-displayName": "Billing Transactions"
+    },
+    {
+      "name": "Billing > Coupons",
+      "description": "Coupon management APIs for creating and managing coupon templates",
+      "x-displayName": "Coupons"
+    },
+    {
+      "name": "Billing > Invoices",
+      "description": "An Invoice represents an official request for payment that details products or services purchased, pricing and payment instructions. It can be issued directly (one-time invoices) or via a [Subscription](/docs/api/billing/subscriptions) (recurring invoices).",
+      "x-displayName": "Invoices"
+    },
+    {
+      "name": "Billing > Meters",
+      "description": "A Meter defines how to aggregate usage events over a billing period to determine how much a customer should be billed.",
+      "x-displayName": "Meters"
+    },
+    {
+      "name": "Billing > Payment Sources",
+      "description": "A Payment Source represents a [Billing Customer](/docs/api/billing/billing_customers)'s funding instrument that can be used to pay for invoices.",
+      "x-displayName": "Payment Sources"
+    },
+    {
+      "name": "Billing > Prices",
+      "description": "A Price defines the pricing information for a [Product](/docs/api/billing/products) such as amount, currency, and billing frequency. A Product can have multiple Prices. For example, you can offer the following pricing options for a software license Product:\n- 1. Standard Price: $10 / month\n- 2. Student Price: $5 / month\n- 3. Lifetime Access: $200 one-off purchase\n\nPrices are primarily used in [Invoice](/docs/api/billing/invoices) and [Subscription](/docs/api/billing/subscriptions) APIs.",
+      "x-displayName": "Prices"
+    },
+    {
+      "name": "Billing > Products",
+      "description": "A Product represents the good or service you offer to customers (e.g. books, memberships). When associated with [Prices](/docs/api/billing/prices), they can be used in [Invoice](/docs/api/billing/invoices) and [Subscription](/docs/api/billing/subscriptions) APIs.",
+      "x-displayName": "Products"
+    },
+    {
+      "name": "Billing > Subscriptions",
+      "description": "A Subscription manages the billing lifecycle for the recurring products or services that a customer purchases. One or more Products and Prices can be added as Subscription Items to a Subscription.\n\nCustomers can be charged automatically, or be issued invoices that they will pay manually every billing cycle.\n\nIf a Subscription is set to charge a Billing Customer's Payment Source automatically, the charge will either happen at the start or end of a billing cycle depending on whether a Price's billing type is `IN_ADVANCE` or `IN_ARREARS`:\n\n- `IN_ADVANCE`: billed at the beginning of the billing cycle.\n- `IN_ARREARS`: billed at the end of the billing cycle.\n\nA Subscription with a free trial moves from `IN_TRIAL` status to `ACTIVE` status when the trial period ends. If a Subscription is created with a future start time, it will be in `PENDING` status until the trial period or paid billing period starts. The status of a Subscription is `UNPAID` when a payment initially fails. When this happens, Airwallex will retry payment up to 4 times (after 1 day, 2 days, 5 days and 7 days).\n\nThe status of a Subscription moves to `ACTIVE` if a payment retry attempt succeeds, or `CANCELLED` if all retries fail. A Subscription moves to `CANCELLED` when it ends or if cancelled.",
+      "x-displayName": "Subscriptions"
+    },
+    {
+      "name": "Billing > Usage Events",
+      "description": "A Usage Event represents a customer's usage of a product at a specific timestamp.",
+      "x-displayName": "Usage Events"
+    },
+    {
+      "name": "Confirmation Letter > Confirmation Letter",
+      "x-displayName": "Confirmation Letter"
+    },
+    {
+      "name": "Core Resources > Direct Debits",
+      "description": "Direct Debits are transactions that third party made to pull funds out of your Airwallex account.",
+      "x-displayName": "Direct Debits"
+    },
+    {
+      "name": "Core Resources > Balances",
+      "description": "Different types of balances such as available and pending can be retrieved to reflect the present balances under your Airwallex account.",
+      "x-displayName": "Balances"
+    },
+    {
+      "name": "Core Resources > Deposits",
+      "description": "Deposits are transfers made into your Airwallex account via Global Accounts, Airwallex Pay, or Aggregate Funds for adding funds or collecting funds from third parties.",
+      "x-displayName": "Deposits"
+    },
+    {
+      "name": "Core Resources > Global Accounts",
+      "description": "Global Accounts are foreign currency accounts that function as local bank accounts. They can be used to collect funds from around the world. You get account details that enable you to collect funds from various platforms such as Amazon, eBay and Shopify, among others. Global Accounts can also be used to top up your Airwallex balance.",
+      "x-displayName": "Global Accounts"
+    },
+    {
+      "name": "Core Resources > Linked Accounts",
+      "description": "Linked Accounts are external financial accounts associated with your Airwallex account. You can use Linked Accounts to fund your Airwallex wallet via Direct Debit.",
+      "x-displayName": "Linked Accounts"
+    },
+    {
+      "name": "Finance > Financial Reports",
+      "description": "The Financial Reports resources provide the capability to create and get the contents of reports on your Airwallex account's historical transaction activity",
+      "x-displayName": "Financial Reports"
+    },
+    {
+      "name": "Finance > Financial Transactions",
+      "x-displayName": "Financial Transactions"
+    },
+    {
+      "name": "Finance > Settlements",
+      "description": "Represents the set of endpoints you use to track and manage payment settlements that contribute to your Airwallex account balance. You can list settlements with optional filters, retrieve a settlements overview for a specific settlement by settlement batch unique identifier, and download batch settlement reports for reconciliation or record keeping.",
+      "x-displayName": "Settlements"
+    },
+    {
+      "name": "Issuing > Cards",
+      "description": "You can create virtual cards associated with your organisation, these cards can be single or multi-usage and be restricted by merchant code, currency and transaction amount.  \n  \nPlease note, this API version is incompatible with any Airwallex Business Account Products such as \"Borderless Cards\" or \"Expense Management\" via Airwallex web or mobile applications. If you're using any of these products, please use API version 2024-02-22. Contact your account manager for more information and to verify compatibility.",
+      "x-displayName": "Cards"
+    },
+    {
+      "name": "Issuing > Authorizations",
+      "description": "You can view authorizations such as pre auth and capture processed against individual cards or for all cards created within your organisation.",
+      "x-displayName": "Authorizations"
+    },
+    {
+      "name": "Issuing > Card Transaction Events",
+      "description": "\nA **transaction event** is the most granular level of the three-level transaction model \n(**Lifecycle → Card Transaction → Transaction Event**).\n\nEach transaction event represents an individual network message or fund movement, with an immutable \nfund movement per event. Use transaction events when you need per-event \ndetails such as failure reasons, authorization subtypes, or individual amounts.\n\n**Event types:** `AUTHORIZATION`, `CLEARING`, `REVERSAL_AUTH`.\n\n**Event subtypes:** `AUTHORIZATION`, `INCREMENTAL_AUTHORIZATION`, `VERIFICATION`, `REVERSAL`, \n`PARTIAL_REVERSAL`, `EXPIRED_AUTHORIZATION`, `CLEARING`, `PARTIAL_CLEARING`, `CLEARING_REVERSAL`.\n\n**Data retention:** Resources can be queried for a maximum of 2 years from creation.\n\nLearn more about the [transaction lifecycle](/docs/issuing/transactions/transaction-lifecycle).\n",
+      "x-displayName": "Card Transaction Events"
+    },
+    {
+      "name": "Issuing > Card Transactions",
+      "description": "\nA **card transaction** is the middle level of the three-level transaction model \n(**Lifecycle → Card Transaction → Transaction Event**).\n\nIt groups related transaction events and represents Airwallex's interpretation of a single card \ntransaction. Each card transaction has a guaranteed terminal status and a fund direction, making it \nthe recommended level for tracking payment outcomes without implementing custom grouping logic.\n\n**Statuses:** `AUTHORIZED` (non-terminal), `CLEARED`, `REVERSED`, `EXPIRED`, `DECLINED`, \n`VERIFIED` (terminal).\n\n**Fund directions:** `DEBIT`, `CREDIT`, or `NO_MOVEMENT`.\n\nAll card transactions within the same payment flow share a common lifecycle ID.\n\n**Data retention:** Resources can be queried for a maximum of 2 years from creation.\n\nLearn more about the [transaction lifecycle](/docs/issuing/transactions/transaction-lifecycle).\n",
+      "x-displayName": "Card Transactions"
+    },
+    {
+      "name": "Issuing > Cardholders",
+      "description": "You can create cardholders, which are authorized representatives of your business that can be issued cards.  \n  \nPlease note, this API version is incompatible with any Airwallex Business Account Products such as \"Borderless Cards\" or \"Expense Management\" via Airwallex web or mobile applications. If you're using any of these products, please use API version 2024-02-22. Contact your account manager for more information and to verify compatibility.",
+      "x-displayName": "Cardholders"
+    },
+    {
+      "name": "Issuing > Config",
+      "description": "You can view config for cards such as default and maximum limit when creating card and remote auth setting to process authorization on your side.",
+      "x-displayName": "Config"
+    },
+    {
+      "name": "Issuing > Digital Wallet Tokens",
+      "description": "Query and manage digital wallet tokens.",
+      "x-displayName": "Digital Wallet Tokens"
+    },
+    {
+      "name": "Issuing > Card Transaction Lifecycles",
+      "description": "\nA **lifecycle** is the top level of the three-level transaction model \n(**Lifecycle → Card Transaction → Transaction Event**).\n\nIt is a container that groups all related card transactions and transaction events belonging to \nthe same payment flow, based on network information. Lifecycles provide a network-level view \nof a payment along with aggregated billing amounts across all related card transactions and events.\n\n**Key characteristics:**\n* Lifecycles do not have a status. Use card transactions if you need guaranteed terminal statuses.\n* Grouping is **best-effort**: it depends on payment networks and acquirers providing consistent \n  identifiers. For example, matched refunds link to the original lifecycle; unmatched refunds \n  create a new one.\n* Use the lifecycle ID to retrieve all associated card transactions and transaction events.\n\n**Data retention:** Resources can be queried for a maximum of 2 years from creation.\n\nLearn more about the [transaction lifecycle](/docs/issuing/transactions/transaction-lifecycle).\n",
+      "x-displayName": "Card Transaction Lifecycles"
+    },
+    {
+      "name": "Issuing > Merchant Brands",
+      "description": "Searches Merchant Brands, primarily for configuring the set of Merchant Brand unique identifiers permitted on a card.",
+      "x-displayName": "Merchant Brands"
+    },
+    {
+      "name": "Issuing > Transaction Disputes",
+      "description": "You can create a dispute for a card transaction. You can also update/submit/cancel it",
+      "x-displayName": "Transaction Disputes"
+    },
+    {
+      "name": "Issuing > Transactions",
+      "description": "You can view transactions processed against individual cards or for all cards created within your organisation.",
+      "x-displayName": "Transactions"
+    },
+    {
+      "name": "Payment Acceptance > Reference Data",
+      "description": "All card schemes publish account range information which helps understand the product, issuer country code, issuer name etc. Hence, merchants can request account range data under a particular PAN thereby enabling business logic such as:\n\n-   Merchants query for BIN info using the PAN to get information about card type so that they can surcharge if the card used is commercial / credit or other cases.\n-   Merchants would like to know the brand and product information to run discounts and offers on the website. The cart amount will be dynamically updated to reflect the discounted price.\n-   Merchants query on the card details like country code to run some risk level checks at their side without depending on the acquirer. Merchants may not want to accept cards issued in a certain country, because sending this to the acquirer may cost them additional charges (gateway fee / authorization fee, etc.).",
+      "x-displayName": "Reference Data"
+    },
+    {
+      "name": "Payment Acceptance > Payment Links",
+      "description": "The **Payment Links** API allows you to accept payments from shoppers using a payment link URL. The payment link URL takes your shopper to an Airwallex hosted secure checkout page where they can make the payment with their preferred payment method.\n\nThe Payment Link supports two pricing options:\n\n1. Fixed pricing - Both the payment `amount` and `currency` are locked. The shopper must pay the exact amount in the given currency.\n2. Flexible pricing - The shopper chooses to pay from a list of supported currencies you specify and decide on the exact amount to pay.",
+      "x-displayName": "Payment Links"
+    },
+    {
+      "name": "Payment Acceptance > Config",
+      "description": "The **Config** API allows you to query for active merchant configurations.",
+      "x-displayName": "Config"
+    },
+    {
+      "name": "Payment Acceptance > Conversion Quotes",
+      "description": "A conversion quote locks the conversion rate between the merchant and shopper currencies for a certain period of time. Merchants can repeatedly use it to price payments in the shopper's local currency during its validity period. Please refer to our [product documentation](/docs/payments/optimize-your-integration/increase-conversion/multi-currency-pricing-api) for integration details.  \n  \nData Retention Policy: You can query Conversion Quote resources for a maximum of 31 days since creation.",
+      "x-displayName": "Conversion Quotes"
+    },
+    {
+      "name": "Payment Acceptance > Customers",
+      "description": "**Customer** is an API resource for you to save your customer's information, which is required by the [Payment Method](/docs/api/payments/payment_methods) and [Payment Consent](/docs/api/payments/payment_consents) APIs.",
+      "x-displayName": "Customers"
+    },
+    {
+      "name": "Payment Acceptance > Customs Declarations",
+      "description": "The **Customs Declaration** API help merchants to complete customs clearance process as regulation required. This API applies only to China customs requirements and workflows.",
+      "x-displayName": "Customs Declarations"
+    },
+    {
+      "name": "Payment Acceptance > Funds Split Reversals",
+      "description": "The **Funds Split Reversal** API helps you reverse an existing **Funds Split** made to a connected account, either entirely or partially.  \n  \nData Retention Policy: You can query and operate Funds Split Reversal resources for a maximum of 2 years since creation.",
+      "x-displayName": "Funds Split Reversals"
+    },
+    {
+      "name": "Payment Acceptance > Funds Splits",
+      "description": "A **Funds Split** will guide you through the process to divide part of the collected funds to another destination before settling to the account that owns the funds.\n\nYou may create multiple **Funds Splits** for the same source of funds to send money to different destinations. However, one **Funds Split** will only have one destination.\n\nYou may specify the following on a Funds Split.\n\n1. What is the source of funds? Denoted by `source_type`.\n2. How much do you want to split? Denoted by `amount`.\n3. Who will receive the funds? Denoted by `destination`.\n\nCurrently, Funds Split only works when the source of funds is a payment acceptance transaction, and the destinations are connected accounts to the funds owner.\n\nData Retention Policy: You can query and operate Funds Split resources for a maximum of 2 years since creation.",
+      "x-displayName": "Funds Splits"
+    },
+    {
+      "name": "Payment Acceptance > Payment Attempts",
+      "description": "A **Payment Attempt** object is created whenever a customer makes a payment with the chosen Payment Method. This API allows you to find out how your customer paid for your order.  \n  \nA customer may attempt to pay for the same order multiple times. However, only one attempt should succeed. Use the [List all Payment Attempts](/docs/api/payments/payment_attempts/list) endpoint to list each and every Payment Attempt made by your customer.  \n  \nData Retention Policy: You can query Payment Attempt resources for a maximum of 2 years since creation.",
+      "x-displayName": "Payment Attempts"
+    },
+    {
+      "name": "Payment Acceptance > Payment Consents",
+      "description": "**Payment Consent** is an API resource to represent the agreement between merchant and Customer of making subsequent payments using the provided Payment Method. In general, we can categorize the usages of Payment Consent into two groups.\n\n- Merchant can initiate the payment without customer's presence (MIT). For example, membership subscription and utilities.\n- Customer can initiate the payment without having to input payment method information again (CIT). For example, fast checkout with saved method.\n\nTo make payments, you can [confirm](/docs/api/payments/payment_intents/confirm) a Payment Intent with the reference of Payment Consent, which must be in the status of `VERIFIED`, `REQUIRES_PAYMENT_METHOD` or `REQUIRES_CUSTOMER_ACTION`. The latter two are only allowed for card and direct debit payment methods as they can be verified directly by the success of the initial payment.",
+      "x-displayName": "Payment Consents"
+    },
+    {
+      "name": "Payment Acceptance > Payment Disputes",
+      "description": " A dispute occurs when a shopper contests legitimacy of a payment. **PaymentDispute** APIs will enable you to manage your dispute events removing the need to managing dispute events manually via web-app, there by reducing your manual efforts.\n\nCombination of a stage & status of a PaymentDispute will indicate the current situation of dispute. You can use our [product documentation](/docs/payments/manage-payments/disputes/dispute-flow) to understand the possible next actions based on stage & status combination.\n\nData Retention Policy: You can query and operate PaymentDispute resources for a maximum of 2 years since creation.",
+      "x-displayName": "Payment Disputes"
+    },
+    {
+      "name": "Payment Acceptance > Payment Intents",
+      "description": "A **Payment Intent** guides you through the process of collecting a payment from your customer. It tracks a payment when your customer first checks out, through to when payment is successfully paid by your customer. A Payment Intent transitions through a number of states throughout the customer's payment journey.\n\nYou may specify the following on a Payment Intent.\n\n1. How much the payment is for? Denoted by `amount` and `currency`.\n2. Who is making the payment? This is described by the optional `customer_id` field.\n3. Which Payment Method to use? Denoted by `payment_method`.\n\nYou/your customer will get back the following hints at different stages of the payment process:\n\n1. The available Payment Methods.\n2. The Payment Method attached to this customer (if `customer_id` is set).\n\nA combination of `status` and `next_action` guide you and your customers through the payment process, including triggering additional authentication flows as required.\n\nData Retention Policy: You can query and operate Payment Intent resources for a maximum of 2 years since creation.",
+      "x-displayName": "Payment Intents"
+    },
+    {
+      "name": "Payment Acceptance > Payment Methods",
+      "description": "A **Payment Method** represents the funding source that belongs to a [Customer](/docs/api/payments/customers) and is used to bind to one or several [Payment Consents](/docs/api/payments/payment_consents).",
+      "x-displayName": "Payment Methods"
+    },
+    {
+      "name": "Payment Acceptance > Terminals",
+      "description": "A **Terminal** represents a physical device that can process payments. This API allows you to manage terminals, including creating, retrieving, updating, activating, deactivating, terminating, and processing payment intents in terminals.  \n  \nA Terminal can be in one of the following states: 1. **ACTIVE**: The Terminal is activated and ready to use. 2. **INACTIVE**: The Terminal is deactivated for any reason. 3. **TERMINATED**: The Terminal is terminated and can't be used anymore.",
+      "x-displayName": "Terminals"
+    },
+    {
+      "name": "Payment Acceptance > Refunds",
+      "description": "The **Refund** API allows you to refund a succeeded payment back to the payment method used by your customer. The refund amount must be equal to or less than the amount specified in the original Payment Intent/Payment Attempt.  \n  \nMultiple Refunds can be created until the full amount is refunded.  \n  \nData Retention Policy: You can query Refund resources for a maximum of 2 years since creation.",
+      "x-displayName": "Refunds"
+    },
+    {
+      "name": "Payment Acceptance > Settlement Records",
+      "description": "Use the Settlement Record API to receive the full settlement details of a particular settlement batch or payment intent.  \n  \nThe Settlement Record API provides the same information as the [Settlement Report](/docs/payments/payment-operations/reporting/settlement-report) but via JSON. The API can be queried using settlement batch ID or payment intent ID or both depending on your reconciliation use case.  \n  \n**How to use this API:**  \n  \n**Step 1:** Retrieve a settlement batch ID and/or payment intent ID.  \nYou can obtain a settlement batch ID by calling the [Get list of settlements endpoint](/docs/api/finance/settlements/list). To query by a specific payment intent, retrieve the corresponding payment intent ID using the [Get list of Payment Intents endpoint](/docs/api/payments/payment_intents/list).  \n  \n**Step 2:** Query the Settlement Record API.  \nOnce you have the required identifiers, make a request to this API to retrieve detailed settlement records. Refer to the [API Reference](/docs/api/payments/settlement_records/list) for request details and parameters.  \n  \nThis API supports keyset pagination using the `page_after` parameter. If the response includes additional pages, the `has_more` field will be set to `true`.",
+      "x-displayName": "Settlement Records"
+    },
+    {
+      "name": "Payment Acceptance > Customer Balance Transactions",
+      "description": "A **Customer Balance Transaction** records a change in the balance of funds that Airwallex holds and returns on behalf of your customer. It is used to notify you when bank transfer funds are received or reversed, including in exceptional scenarios such as overpayment, underpayment, or unmatched funding.\n\n[For bank transfer payments](https://www.airwallex.com/docs/payments/payment-methods/global/bank-transfer), the payment instructions are displayed to the shopper, who then manually transfers the funds through their own bank. Because the transfer is completed outside of the Airwallex checkout flow, the received funds may not always match the original PaymentIntent or PaymentAttempt. Customer Balance Transactions give you clear visibility into every received fund, its status, and any reversal.\n\nA Customer Balance Transaction has one of the following types:\n\n1. `bank_transfer` - Adds bank transfer funds to the customer balance.\n2. `bank_transfer_reversal` - Reverses a previous bank transfer transaction and deducts the corresponding amount from the customer balance.\n3. `applied_to_payment` - Applies bank transfer funds from the customer balance to a payment, reducing the available customer balance.\n\nAirwallex emits `customer_balance_transaction` webhook events as funds progress. Refer to the product documentation for the full list of events and their payloads.\n\nThis resource applies to bank transfer payments only.",
+      "x-displayName": "Customer Balance Transactions"
+    },
+    {
+      "name": "Payouts > Batch Transfers",
+      "description": "A batch transfer resource is created when you want to create multiple transfers with one fund deduction from your funding source. You can create a batch transfer first, and then add items into this batch. You can only input one funding source in a batch. Beneficiary information is contained in each item in the batch.",
+      "x-displayName": "Batch Transfers"
+    },
+    {
+      "name": "Payouts > Beneficiaries",
+      "description": "A beneficiary resource needs to be created before a payment can be made, the beneficiary notes the individual or organisation being paid along with the bank details and payment method. A beneficiary unique identifier is generated upon the creation can be used for creating payment using a payment resource.",
+      "x-displayName": "Beneficiaries"
+    },
+    {
+      "name": "Payouts > Payers",
+      "description": "By default you make payments from yourself therefore this resource is optional. However if your Airwallex Account allows paying on behalf of others, you can create new payers and this resource becomes mandatory to be defined which payer you are paying from.",
+      "x-displayName": "Payers"
+    },
+    {
+      "name": "Payouts > Transfers",
+      "description": "A transfer resource is created when you send funds to a beneficiary, it details the beneficiary, bank details, the amount being paid, its status and other relevant information. You can also create the transfer by using the beneficiary unique identifier which was previously created using Beneficiary resource.",
+      "x-displayName": "Transfers"
+    },
+    {
+      "name": "Risk > Fraud Feedback (Issuing)",
+      "description": "The **Fraud Feedback** API may be used to confirm whether an issuing transaction was authorized or not authorized by the cardholder. A transaction confirmed to be authorized will allow Airwallex to better understand the cardholder's transaction patterns and increase the success rate of similar transactions. A transaction confirmed not to have been authorized by the cardholder will be labelled as fraudulent and the card will be blocked.  \n  \nPlease note all future transactions on a blocked card will be blocked. If you require a card to be unblocked please contact support.  \n  \nFrozen cards may be unfrozen via the [update a Card](/docs/api/issuing/cards/update) API.",
+      "x-displayName": "Fraud Feedback (Issuing)"
+    },
+    {
+      "name": "Risk > Watchlist",
+      "description": "The Watchlist API is an automated tool for transaction verification and fraud prevention. With this API, merchants can create and manage Watchlists of shoppers to automatically accept, verify, or block transactions.\nTo add a Watchlist item, please use the ‘create’ endpoint. To make changes to an existing Watchlist item, please use the ‘update’ endpoint. To retrieve a specific item in the Watchlist, please provide the item_id with the ‘get’ endpoint.",
+      "x-displayName": "Watchlist"
+    },
+    {
+      "name": "Risk > Request for Information (RFI)",
+      "description": "As part of reviewing customer profiles and activity, Airwallex may request additional information about an account by raising an RFI. Airwallex will initiate a request for information which may then contain one or more follow up questions if more clarification is needed.",
+      "x-displayName": "Request for Information (RFI)"
+    },
+    {
+      "name": "Risk > Sellers",
+      "description": "Manage sellers for your Merchant of Record (MoR) account.",
+      "x-displayName": "Sellers"
+    },
+    {
+      "name": "Risk > Risk Reports",
+      "description": "The Risk Reports API lets merchants self-serve their own risk datasets. The currently supported report type is `PAYMENT_FRAUD_REPORT`, which contains payment fraud data reported through acquirer TC40 / SAFE reports for a given date range.\n\nUse [Generate a risk report](/docs/api/risk/risk_reports/generate) to submit a query and obtain a report `id`, followed by [Retrieve a risk report](/docs/api/risk/risk_reports/retrieve) to track the report status. When the report reaches `COMPLETED` status, obtain a short-lived signed download link. Reports are generated asynchronously. Subscribe to the `risk.risk_reports.completed` and `risk.risk_reports.failed` webhook events to be notified when a report is ready or generation has failed.",
+      "x-displayName": "Risk Reports"
+    },
+    {
+      "name": "Embedded Finance > Platform Reports",
+      "description": "Generate reports to understand the activity of your Platform account and connected accounts.\n\nUse [Create Platform report](/docs/api/scale/platform_reports/create) to obtain a report id, followed by [Get Platform report](/docs/api/scale/platform_reports/retrieve) to retrieve a download URL for the report once it is ready. Subscribe to the `Platform Report` webhook in the Airwallex webapp to be notified when the report that you have requested is ready. Only files smaller than 100MB can be generated.\n\nCreate scheduled reports by specifying future dates for `to_created_at`, or `to_updated_at`.\n\nReports will be generated at the end of the requested interval, once all data has been captured.\n\nFor example, if `2023-01-10` is the current date, [request a Platform report](/docs/api/scale/platform_reports/create) with `from_created_at` = `2023-01-01` and `to_created_at` = `2023-02-01` to obtain data for January. The scheduled report will be generated after the end of the interval.",
+      "x-displayName": "Platform Reports"
+    },
+    {
+      "name": "Embedded Finance > Hosted Flows",
+      "description": "Airwallex Hosted Flows enable a Platform to redirect end users into Airwallex-hosted web pages to complete a variety of activity flows. Platforms can deliver hosted flows via a secure, short-lived link unique to each connected account. After completion of a flow, the user is redirected back to the platform. Hosted flows are available for [accounts created via API](/docs/api/scale/accounts/create).\n\n**Currently supported flows:**\n\n * `onboarding` – [Submit KYC information](/docs/connected-accounts/onboarding/kyc-and-onboarding/hosted-onboarding) needed to activate the account.\n\nContact your Airwallex Account Manager to start using hosted flows.\n\nYour Account Manager will create a **flow template**, which defines the series of steps the end user will proceed through. Then, you can create a **flow instance** for a particular connected account and direct users to the provided URL.",
+      "x-displayName": "Hosted Flows"
+    },
+    {
+      "name": "Embedded Finance > Charges",
+      "description": "A [Scale Charge](/docs/connected-accounts/move-funds/charges) can be used to charge a Connected Account and credit the Platform account's wallet. This action may support processing fees and charges from your clients or business partners. Source Connected Account to be charged must have passed KYC and be in state `ACTIVE`.",
+      "x-displayName": "Charges"
+    },
+    {
+      "name": "Embedded Finance > Connected Account Transfers",
+      "description": "A [Connected Account Transfer](/docs/connected-accounts/move-funds/connected-account-(ca)-transfers) can be used to send funds directly from a Platform Account or Connected Account to another Account connected to the same platform. Destination Connected Account must have passed KYC and be in state `ACTIVE`.",
+      "x-displayName": "Connected Account Transfers"
+    },
+    {
+      "name": "Embedded Finance > PSP Settlement Deposits",
+      "description": "A PSP Settlement Deposit is a deposit made by a PSP into a holding account. It is associated with a PSP Settlement Intent.\n\nAirwallex provides the Platform with a **holding account**, set up by a Airwallex Solutions Engineer. Platforms pass payment details to a pay-in PSP for funds acquired by PSPs to be deposited to Airwallex.\n\nPSP Settlement Deposits form part of the [PSP-agnostic payout solution](/docs/payments-for-platforms/psp-agnostic/implement-your-psp-agnostic-solution).",
+      "x-displayName": "PSP Settlement Deposits"
+    },
+    {
+      "name": "Embedded Finance > PSP Settlement Intents",
+      "description": "A PSP settlement intent represents a settlement with a PSP in a particular currency. Each PSP settlement intent is associated with one or more PSP settlement deposits by `settlement_reference`. \nAfter creating your PSP settlement intent, you can start splitting it, creating one PSP settlement split for each target account. Once you complete splitting your PSP settlement intent, you can submit it and wait for it to be matched with the associated PSP settlement deposit. The sum of the amounts of the PSP settlement splits of a PSP settlement intent should match the sum of the amounts of associated deposits. \nPSP settlement intents form part of the [PSP-agnostic payout solution](/docs/payments-for-platforms/psp-agnostic/implement-your-psp-agnostic-solution).",
+      "x-displayName": "PSP Settlement Intents"
+    },
+    {
+      "name": "Embedded Finance > PSP Settlement Splits",
+      "description": "Platforms must share PSP Settlement Split information with Airwallex before funds settle to the holding account, by calling the [Split a PSP Settlement Intent API](/docs/api/scale/psp_settlement_splits/split_psp_settlement_intents). This data typically originates from the pay-in PSP's reporting feed.\n\nFunds in the holding account are inaccessible to all parties until the funds are released to other connected accounts. A Platform can choose to [release a PSP Settlement Split](/docs/api/scale/psp_settlement_splits/release) anytime. On release, funds are transferred to a connected account for the recipient, such as a seller.\n\nIf a Platform wants to apply a transaction fee to the seller, they can create one split for the amount due to the seller, and can create another split for the fee to the platform's own account.\nA Platform can trigger a [payout](/docs/api/payouts/transfers) from any connected account to an **external bank account** at any time (for example, at the end of a payout cycle).\nPSP Settlement Splits form part of the [PSP-agnostic payout solution](/docs/payments-for-platforms/psp-agnostic/implement-your-psp-agnostic-solution).",
+      "x-displayName": "PSP Settlement Splits"
+    },
+    {
+      "name": "Embedded Finance > Offboardings",
+      "description": "The Offboarding API allows platforms to programmatically submit offboarding requests\nfor connected accounts and query the status of submitted offboardings.\n\nCreate an offboarding raises an Airwallex Operations-owned offboarding case for account closure. It\ndiffers from [Suspend account](/docs/api/scale/accounts/suspend), which temporarily\nsuspends an account and can be reversed with\n[Reactivate account](/docs/api/scale/accounts/reactivate). You can create an offboarding for a connected account that is not already\nclosed or pending closure. Create Offboarding is not limited to `ACTIVE` accounts.\nWhile an offboarding is in progress (`PENDING`), the connected account `status` does\nnot change. After it completes successfully (`COMPLETED`), the account enters pending\nclosure and the connected account `status` returned by the client API is `SUSPENDED`\non all API versions. After a 30-day grace period the account is permanently closed;\nfrom API version `2026-08-21` that surfaces as `CLOSED` (earlier versions continue to\nreturn `SUSPENDED`). If multiple connected\naccounts share the same client legal entity, you cannot create an offboarding for\nanother account under that legal entity until the existing offboarding request is\ncompleted. Balance handling during offboarding is managed by Airwallex operations and\nis not available through this API.",
+      "x-displayName": "Offboardings"
+    },
+    {
+      "name": "Embedded Finance > Platform Liquidity Programs",
+      "description": "Manage platform liquidity programs, spending accounts, transactions, and fund deposit and withdrawal.",
+      "x-displayName": "Platform Liquidity Programs"
+    },
+    {
+      "name": "Embedded Finance > Accounts",
+      "description": "The Accounts resource represents an Airwallex account, which serves as the main container for a customer’s financial data—including wallet balances, financial transactions, cards, and more. This resource allows customers to retrieve and update account information. For platform customers, it also supports onboarding and managing [Connected Accounts](/docs/connected-accounts/how-connected-accounts-work).",
+      "x-displayName": "Accounts"
+    },
+    {
+      "name": "Embedded Finance > Invitation Links",
+      "description": "Invitation Links are used by platforms or partners to manage Scale Connect invitation links.",
+      "x-displayName": "Invitation Links"
+    },
+    {
+      "name": "Security > Activity Log",
+      "description": "Get activity logs of the login account",
+      "x-displayName": "Activity Log"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Billing",
+      "description": "Simulate billing operations in the sandbox environment.",
+      "x-displayName": "Billing"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Accounts",
+      "description": "Simulate the status transition of a connected account through its lifecycle in the sandbox environment.",
+      "x-displayName": "Accounts"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Deposits",
+      "description": "You can receive funds into your [Airwallex Wallet](/docs/global-treasury/understanding-global-treasury/treasury-concepts#wallet) via bank transfers to [Global Accounts](/docs/api/core_resources/global_accounts) or direct debits from [Linked Accounts](/docs/api/core_resources/linked_accounts).\n\nThe Global Accounts deposit simulation API allows you to simulate a deposit from an external bank account in the sandbox environment.\n\nThe Direct Debit deposit simulation APIs allow you to transition Direct Debit deposit statuses in the sandbox environment.\n",
+      "x-displayName": "Deposits"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Issuing",
+      "description": "You can simulate transactions on cards issued by Airwallex and KYC processes of cardholders. Find out more about [generating card issuing transactions](/docs/developer-tools/sandbox-environment/issuing/simulate-transactions-on-issued-cards) and [cardholder status](/docs/issuing/get-started/create-cardholders/cardholder-statuses).",
+      "x-displayName": "Issuing"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Linked Accounts",
+      "description": "Simulate the Linked Account lifecycle scenarios in the sandbox environment.",
+      "x-displayName": "Linked Accounts"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Payment Acceptance",
+      "description": "Simulate shopper actions on dispute in the sandbox environment.",
+      "x-displayName": "Payment Acceptance"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Terminal Simulation",
+      "description": "A Terminal represents a virtual point-of-sale (POS) device registered in the sandbox environment for testing in-person payment flows.",
+      "x-displayName": "Terminal Simulation"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Request for Information (RFI)",
+      "description": "Simulate the creation and closure of RFI in the sandbox environment.",
+      "x-displayName": "Request for Information (RFI)"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Transfers",
+      "description": "Simulate the transfer lifecycle scenarios in the sandbox environment.",
+      "x-displayName": "Transfers"
+    },
+    {
+      "name": "Simulation (Sandbox Only) > Offboardings",
+      "description": "Simulate status transitions for connected account offboarding in the sandbox environment.",
+      "x-displayName": "Offboardings"
+    },
+    {
+      "name": "Spend > Vendors",
+      "description": "Manages vendor records for accounts payable and purchase order workflows. Supports vendor creation, retrieval, listing with filters, and sync status updates for integration with external accounting systems.",
+      "x-displayName": "Vendors"
+    },
+    {
+      "name": "Spend > Reimbursements",
+      "description": "Manages out-of-pocket expense reimbursements, including individual requests and grouped reports. Supports approval workflows, receipt attachments, payment processing, and sync with external accounting systems.",
+      "x-displayName": "Reimbursements"
+    },
+    {
+      "name": "Spend > Purchase Orders",
+      "description": "Manages purchase orders for tracking vendor commitments and spend. Supports creation, retrieval, listing with filters, and sync status updates for integration with external accounting systems.",
+      "x-displayName": "Purchase Orders"
+    },
+    {
+      "name": "Spend > Expenses",
+      "description": "Manages expenses associated with corporate card transactions. Supports approval workflows, receipt attachments, accounting field categorization, line item breakdowns, and sync with external accounting systems.",
+      "x-displayName": "Expenses"
+    },
+    {
+      "name": "Spend > Bills",
+      "description": "Manages bills representing accounts payable obligations. Supports retrieval, listing with filters, and sync status updates for integration with external accounting systems.",
+      "x-displayName": "Bills"
+    },
+    {
+      "name": "Supporting Services > Connected Stores",
+      "description": "A Connected Store object represents an e-commerce store that is owned by the account and was ever connected to Airwallex.",
+      "x-displayName": "Connected Stores"
+    },
+    {
+      "name": "Supporting Services > File Service",
+      "description": "Represents files uploaded to Airwallex for secure storage and retrieval via download links. Each file can be referenced in other API endpoints using its unique file identifier.",
+      "x-displayName": "File Service"
+    },
+    {
+      "name": "Supporting Services > Reference Data",
+      "description": "Reference data made available to support the usage of the Airwallex platform.",
+      "x-displayName": "Reference Data"
+    },
+    {
+      "name": "Transactional FX > Conversion Amendments",
+      "description": "The Amendments resource provides the capability to make changes to existing conversions. Right now, the only supported amendment type is a full cancellation.",
+      "x-displayName": "Conversion Amendments"
+    },
+    {
+      "name": "Transactional FX > Conversion",
+      "description": "The Conversion resources provide capability to create transactions that convert from one currency into another. The transaction will result in a debit and credit against your wallet balances. Both Quotes and Rates transactions can be created using the Conversion resources.",
+      "x-displayName": "Conversion"
+    },
+    {
+      "name": "Transactional FX > Quotes",
+      "description": "Create a quote that can be used in a subsequent conversion request during the requested validity period.",
+      "x-displayName": "Quotes"
+    },
+    {
+      "name": "Transactional FX > Rates",
+      "description": "You can retrieve the current rates that a conversion request would be booked at.",
+      "x-displayName": "Rates"
+    },
+    {
+      "name": "Webhooks > Webhooks",
+      "description": "Subscribe to real-time events from Airwallex organisations or accounts via webhooks.\n\nThe event types available to you are limited by the [API key scopes](/docs/developer-tools/api/api-key-scopes) granted to the API key used in your authentication.",
+      "x-displayName": "Webhooks"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Account Capability",
+      "tags": [
+        "Account Capability > Account Capability"
+      ]
+    },
+    {
+      "name": "Accounting",
+      "tags": [
+        "Accounting > General Ledger Accounts",
+        "Accounting > Tax Codes",
+        "Accounting > Accounting Fields",
+        "Accounting > Accounting Field Values"
+      ]
+    },
+    {
+      "name": "Authentication",
+      "tags": [
+        "Authentication > Embedded Components",
+        "Authentication > Authentication"
+      ]
+    },
+    {
+      "name": "Billing",
+      "tags": [
+        "Billing > Credit Notes",
+        "Billing > Billing Checkouts",
+        "Billing > Billing Customers",
+        "Billing > Billing Transactions",
+        "Billing > Coupons",
+        "Billing > Invoices",
+        "Billing > Meters",
+        "Billing > Payment Sources",
+        "Billing > Prices",
+        "Billing > Products",
+        "Billing > Subscriptions",
+        "Billing > Usage Events"
+      ]
+    },
+    {
+      "name": "Confirmation Letter",
+      "tags": [
+        "Confirmation Letter > Confirmation Letter"
+      ]
+    },
+    {
+      "name": "Core Resources",
+      "tags": [
+        "Core Resources > Direct Debits",
+        "Core Resources > Balances",
+        "Core Resources > Deposits",
+        "Core Resources > Global Accounts",
+        "Core Resources > Linked Accounts"
+      ]
+    },
+    {
+      "name": "Finance",
+      "tags": [
+        "Finance > Financial Reports",
+        "Finance > Financial Transactions",
+        "Finance > Settlements"
+      ]
+    },
+    {
+      "name": "Issuing",
+      "tags": [
+        "Issuing > Cards",
+        "Issuing > Authorizations",
+        "Issuing > Card Transaction Events",
+        "Issuing > Card Transactions",
+        "Issuing > Cardholders",
+        "Issuing > Config",
+        "Issuing > Digital Wallet Tokens",
+        "Issuing > Card Transaction Lifecycles",
+        "Issuing > Merchant Brands",
+        "Issuing > Transaction Disputes",
+        "Issuing > Transactions"
+      ]
+    },
+    {
+      "name": "Payments",
+      "tags": [
+        "Payment Acceptance > Reference Data",
+        "Payment Acceptance > Payment Links",
+        "Payment Acceptance > Config",
+        "Payment Acceptance > Conversion Quotes",
+        "Payment Acceptance > Customers",
+        "Payment Acceptance > Customs Declarations",
+        "Payment Acceptance > Funds Split Reversals",
+        "Payment Acceptance > Funds Splits",
+        "Payment Acceptance > Payment Attempts",
+        "Payment Acceptance > Payment Consents",
+        "Payment Acceptance > Payment Disputes",
+        "Payment Acceptance > Payment Intents",
+        "Payment Acceptance > Payment Methods",
+        "Payment Acceptance > Terminals",
+        "Payment Acceptance > Refunds",
+        "Payment Acceptance > Settlement Records",
+        "Payment Acceptance > Customer Balance Transactions"
+      ]
+    },
+    {
+      "name": "Payouts",
+      "tags": [
+        "Payouts > Batch Transfers",
+        "Payouts > Beneficiaries",
+        "Payouts > Payers",
+        "Payouts > Transfers"
+      ]
+    },
+    {
+      "name": "Risk",
+      "tags": [
+        "Risk > Fraud Feedback (Issuing)",
+        "Risk > Watchlist",
+        "Risk > Request for Information (RFI)",
+        "Risk > Sellers",
+        "Risk > Risk Reports"
+      ]
+    },
+    {
+      "name": "Embedded Finance",
+      "tags": [
+        "Embedded Finance > Platform Reports",
+        "Embedded Finance > Hosted Flows",
+        "Embedded Finance > Charges",
+        "Embedded Finance > Connected Account Transfers",
+        "Embedded Finance > PSP Settlement Deposits",
+        "Embedded Finance > PSP Settlement Intents",
+        "Embedded Finance > PSP Settlement Splits",
+        "Embedded Finance > Offboardings",
+        "Embedded Finance > Platform Liquidity Programs",
+        "Embedded Finance > Accounts",
+        "Embedded Finance > Invitation Links"
+      ]
+    },
+    {
+      "name": "Security",
+      "tags": [
+        "Security > Activity Log"
+      ]
+    },
+    {
+      "name": "Simulation",
+      "tags": [
+        "Simulation (Sandbox Only) > Billing",
+        "Simulation (Sandbox Only) > Accounts",
+        "Simulation (Sandbox Only) > Deposits",
+        "Simulation (Sandbox Only) > Issuing",
+        "Simulation (Sandbox Only) > Linked Accounts",
+        "Simulation (Sandbox Only) > Payment Acceptance",
+        "Simulation (Sandbox Only) > Terminal Simulation",
+        "Simulation (Sandbox Only) > Request for Information (RFI)",
+        "Simulation (Sandbox Only) > Transfers",
+        "Simulation (Sandbox Only) > Offboardings"
+      ]
+    },
+    {
+      "name": "Spend",
+      "tags": [
+        "Spend > Vendors",
+        "Spend > Reimbursements",
+        "Spend > Purchase Orders",
+        "Spend > Expenses",
+        "Spend > Bills"
+      ]
+    },
+    {
+      "name": "Supporting Services",
+      "tags": [
+        "Supporting Services > Connected Stores",
+        "Supporting Services > File Service",
+        "Supporting Services > Reference Data"
+      ]
+    },
+    {
+      "name": "Transactional FX",
+      "tags": [
+        "Transactional FX > Conversion Amendments",
+        "Transactional FX > Conversion",
+        "Transactional FX > Quotes",
+        "Transactional FX > Rates"
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "tags": [
+        "Webhooks > Webhooks"
+      ]
+    }
+  ],
+  "paths": {
+    "/api/v1/transfers/create": {
+      "post": {
+        "tags": [
+          "Payouts > Transfers"
+        ],
+        "summary": "1|Create a Transfer",
+        "description": "Create a new transfer to a beneficiary. The transfer can either include an underlying conversion when the transfer currency varies from the source currency, or will not include a conversion when the transfer currency and source currency match.\n\nWe have created a dynamic schema that will return required fields based on some key criteria that we need to determine the destination of the transfer and the route it will take to reach that destination. \n\n**Transfer Fee**\n\nBy default, payer is responsible for the transfer fee but may be passed onto the beneficiary by setting `fee_paid_by` to `BENEFICIARY`. The `fee_paid_by` flag affects the total amount the payer has to pay, and the amount the beneficiary receives.\n\nThe fee component is calculated by the system and is communicated back via `fee_currency` and `fee_amount` in the API response. The actual amounts both parties pay and receive are represented by `amount_payer_pays` and `amount_beneficiary_receives` respectively.\n\n**Approvals**\n\nCreating a transfer to be submitted for approval is available upon request. When a transfer including a conversion is submitted for approval, values for `amount_beneficiary_receives`, `amount_payer_pays`, `fee_amount`, `transfer_amount` and `source_amount` in the response are tentative based on the exchange rate at the time of creation until the transfer status changes to `SCHEDULED`, at which point the exchange rate is confirmed. When the transfer status transitions to `SCHEDULED`, if the `transfer_date` is a past date, its value will get updated.",
+        "operationId": "createTransfer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason",
+                  "reference",
+                  "request_id",
+                  "transfer_currency"
+                ],
+                "properties": {
+                  "application_fee_options": {
+                    "type": "array",
+                    "description": "The application fee options applied to the transfer.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "string",
+                          "description": "A positive integer specifying the amount of the fee expressed in the smallest unit of the currency. e.g. cents for USD. This field is required only when type is FIXED."
+                        },
+                        "currency": {
+                          "type": "string",
+                          "description": "Specify the currency of the application fee in ISO 4217 currency code format, e.g., USD, AUD. This field is required when the type is FIXED.  \nWhen the type is PERCENTAGE and source_type is CONVERSION, the currency for the conversion if specified must be from the currency pair. If the currency is unspecified, the contra currency of the quote will be used."
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "description": "The metadata of the application fee. The value should be set in key:value format. (e.g., id:1).",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "percentage": {
+                          "type": "string",
+                          "description": "Required if the type is PERCENTAGE, and the value to be provided depends on the transaction context.  \nFX Conversions: The value acts as a markup on the FX rate, increasing the conversion cost by the specified percentage.  \nOthers: The value represents a direct fee calculated as a percentage of the transaction amount."
+                        },
+                        "source_type": {
+                          "type": "string",
+                          "description": "Specify type of the source transaction.",
+                          "enum": [
+                            "CONVERSION",
+                            "TRANSFER"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "Define the type of fee calculation. If the `source_type` is `CONVERSION`, then the type must be `PERCENTAGE`.",
+                          "enum": [
+                            "FIXED",
+                            "PERCENTAGE"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "beneficiary": {
+                    "type": "object",
+                    "description": "Details for the beneficiary in the transfer request. If beneficiary_id provided in the transfer request then beneficiary should be empty.",
+                    "properties": {
+                      "additional_info": {
+                        "type": "object",
+                        "description": "Additional information about the beneficiary.",
+                        "properties": {
+                          "business_area": {
+                            "type": "string",
+                            "description": "Category of business activity."
+                          },
+                          "business_phone_number": {
+                            "type": "string",
+                            "description": "Business phone number."
+                          },
+                          "business_registration_number": {
+                            "type": "string",
+                            "description": "Business registration number."
+                          },
+                          "external_identifier": {
+                            "type": "string",
+                            "description": "The identifier that you use to identify a beneficiary, usually a unique identifier. This field can be used to link transfers or beneficiaries to other records such as tax form details for filing purposes."
+                          },
+                          "legal_rep_bank_account_number": {
+                            "type": "string",
+                            "description": "Legal representative's personal bank account number used for declaration purposes. No funds will be sent to this account number."
+                          },
+                          "legal_rep_first_name_in_chinese": {
+                            "type": "string",
+                            "description": "Legal representative first name in chinese."
+                          },
+                          "legal_rep_id_number": {
+                            "type": "string",
+                            "description": "Legal representative id number."
+                          },
+                          "legal_rep_last_name_in_chinese": {
+                            "type": "string",
+                            "description": "Legal representative last name in chinese."
+                          },
+                          "legal_rep_mobile_number": {
+                            "type": "string",
+                            "description": "Legal representative’s mobile number associated with their bank account."
+                          },
+                          "personal_email": {
+                            "type": "string",
+                            "description": "Personal email."
+                          },
+                          "personal_first_name_in_chinese": {
+                            "type": "string",
+                            "description": "Beneficiary's first name in Chinese."
+                          },
+                          "personal_id_number": {
+                            "type": "string",
+                            "description": "Personal unique identifier number."
+                          },
+                          "personal_id_type": {
+                            "type": "string",
+                            "description": "Personal unique identifier type."
+                          },
+                          "personal_last_name_in_chinese": {
+                            "type": "string",
+                            "description": "Beneficiary's last name in Chinese."
+                          },
+                          "personal_mobile_number": {
+                            "type": "string",
+                            "description": "Personal mobile number."
+                          },
+                          "recipient_account_id": {
+                            "type": "string",
+                            "description": "Account unique identifier of the recipient account used for payout processing. The account must be active and have `customer_agreements.terms_and_conditions.service_agreement_type` set to `RECIPIENT` (verify via [Retrieve account details API](/docs/api/scale/accounts/detail))."
+                          },
+                          "security_question": {
+                            "type": "string",
+                            "description": "Security question. Required when the email address is not registered with Interac e-Transfer autodeposit."
+                          },
+                          "security_question_answer": {
+                            "type": "string",
+                            "description": "Security question answer. Required when the email address is not registered with Interac e-Transfer autodeposit."
+                          }
+                        }
+                      },
+                      "address": {
+                        "type": "object",
+                        "description": "Beneficiary's address details.",
+                        "properties": {
+                          "city": {
+                            "type": "string",
+                            "description": "Beneficiary's city."
+                          },
+                          "country_code": {
+                            "type": "string",
+                            "description": "Beneficiary's country code (2-letter ISO 3166-2 country code)."
+                          },
+                          "postcode": {
+                            "type": "string",
+                            "description": "Beneficiary's post code."
+                          },
+                          "state": {
+                            "type": "string",
+                            "description": "Beneficiary's state."
+                          },
+                          "street_address": {
+                            "type": "string",
+                            "description": "Beneficiary's street address."
+                          }
+                        }
+                      },
+                      "bank_details": {
+                        "type": "object",
+                        "required": [
+                          "account_currency",
+                          "account_name",
+                          "bank_country_code"
+                        ],
+                        "description": "Beneficiary's bank account details where the payment will be credited.",
+                        "properties": {
+                          "account_currency": {
+                            "type": "string",
+                            "description": "Account Currency."
+                          },
+                          "account_name": {
+                            "type": "string",
+                            "description": "Account holder name of the beneficiary’s bank account."
+                          },
+                          "account_name_alias": {
+                            "type": "string",
+                            "description": "The beneficiary’s account name known in the payment system. This is only supported in some regions and transfer methods. See detailed definitions in the [Payouts Product Docs](/docs/payouts/beneficiaries/create-beneficiaries)."
+                          },
+                          "account_number": {
+                            "type": "string",
+                            "description": "Account number, mostly for non-european countries, either account_number or iban should be filled."
+                          },
+                          "account_routing_type1": {
+                            "type": "string",
+                            "description": "Routing code type."
+                          },
+                          "account_routing_type2": {
+                            "type": "string",
+                            "description": "Routing code sub type."
+                          },
+                          "account_routing_value1": {
+                            "type": "string",
+                            "description": "Routing code value."
+                          },
+                          "account_routing_value2": {
+                            "type": "string",
+                            "description": "Routing code sub type value."
+                          },
+                          "bank_account_category": {
+                            "type": "string",
+                            "description": "bank account type."
+                          },
+                          "bank_branch": {
+                            "type": "string",
+                            "description": "Specific branch of bank account."
+                          },
+                          "bank_country_code": {
+                            "type": "string",
+                            "description": "Bank country code (2-letter ISO 3166-2 country code)."
+                          },
+                          "bank_name": {
+                            "type": "string",
+                            "description": "Bank name of the beneficiary's bank account."
+                          },
+                          "bank_state": {
+                            "type": "string",
+                            "description": "Bank State."
+                          },
+                          "bank_street_address": {
+                            "type": "string",
+                            "description": "Bank street address."
+                          },
+                          "binding_mobile_number": {
+                            "type": "string",
+                            "description": "The mobile number tied to the Beneficiary's bank account."
+                          },
+                          "fingerprint": {
+                            "type": "string",
+                            "description": "Fingerprint of current beneficiary's bank account."
+                          },
+                          "iban": {
+                            "type": "string",
+                            "description": "International bank account number, mostly for european countries."
+                          },
+                          "intermediary_bank_name": {
+                            "type": "string",
+                            "description": "Bank name of the beneficiary's intermediary bank."
+                          },
+                          "intermediary_bank_swift_code": {
+                            "type": "string",
+                            "description": "Intermediary bank SWIFT code / BIC,Should contain alphanumeric characters only, Should be a valid and supported SWIFT code / BIC."
+                          },
+                          "local_clearing_system": {
+                            "type": "string",
+                            "description": "Which clearing system should be used for this local bank transfer.\n\nPlease refer to our [payout guide](https://airwallex.com/guides/payout) for details about each option.\n\nWe suggest explicitly specifying this value, however if it's not provided we will select a default (using the specified account routing type and/or what's most often the best option)."
+                          },
+                          "swift_code": {
+                            "type": "string",
+                            "description": "Bank swift code."
+                          }
+                        }
+                      },
+                      "card": {
+                        "type": "object",
+                        "required": [
+                          "cardholder_name",
+                          "token"
+                        ],
+                        "description": "Beneficiary's card details where the payment will be credited.",
+                        "properties": {
+                          "brand": {
+                            "type": "string",
+                            "description": "Card brand.",
+                            "readOnly": true
+                          },
+                          "cardholder_name": {
+                            "type": "string",
+                            "description": "Cardholder name."
+                          },
+                          "currency": {
+                            "type": "string",
+                            "description": "Card currency.",
+                            "readOnly": true
+                          },
+                          "expiry_month": {
+                            "type": "string",
+                            "description": "Expiry month."
+                          },
+                          "expiry_year": {
+                            "type": "string",
+                            "description": "Expiry year."
+                          },
+                          "number": {
+                            "type": "string",
+                            "description": "Card number.",
+                            "readOnly": true
+                          },
+                          "token": {
+                            "type": "string",
+                            "description": "Tokenised card number, which can be retrieved from Airwallex beneficiary component."
+                          }
+                        }
+                      },
+                      "company_name": {
+                        "type": "string",
+                        "description": "Company name of the beneficiary."
+                      },
+                      "date_of_birth": {
+                        "type": "string",
+                        "description": "beneficiary date of birth."
+                      },
+                      "digital_wallet": {
+                        "type": "object",
+                        "required": [
+                          "account_name",
+                          "id_type",
+                          "id_value",
+                          "provider"
+                        ],
+                        "description": "Beneficiary's digital wallet details where the payment will be credited.",
+                        "properties": {
+                          "account_name": {
+                            "type": "string",
+                            "description": "Account holder name of the beneficiary’s digital wallet."
+                          },
+                          "country_code": {
+                            "type": "string",
+                            "description": "Digital wallet country code (2-letter ISO 3166-2 country code)."
+                          },
+                          "id_type": {
+                            "type": "string",
+                            "description": "Account identifier type of the beneficiary’s digital wallet."
+                          },
+                          "id_value": {
+                            "type": "string",
+                            "description": "Account identifier value of the beneficiary’s digital wallet."
+                          },
+                          "provider": {
+                            "type": "string",
+                            "description": "Service provider of the beneficiary's digital wallet."
+                          }
+                        }
+                      },
+                      "stablecoin_wallet": {
+                        "type": "object",
+                        "required": [
+                          "asset",
+                          "network",
+                          "address"
+                        ],
+                        "properties": {
+                          "asset": {
+                            "type": "string",
+                            "description": "Stablecoin asset type, e.g., `USDC`."
+                          },
+                          "network": {
+                            "type": "string",
+                            "description": "Blockchain network, e.g., `ETHEREUM`."
+                          },
+                          "address": {
+                            "type": "string",
+                            "description": "Blockchain wallet address of the beneficiary. Sending stablecoins to an incorrect wallet address or unsupported network will result in the irreversible loss of funds. Always verify the recipient wallet address and network before initiating a transfer."
+                          }
+                        }
+                      },
+                      "entity_type": {
+                        "type": "string",
+                        "description": "Entity type of the beneficiary."
+                      },
+                      "first_name": {
+                        "type": "string",
+                        "description": "First name of the beneficiary."
+                      },
+                      "last_name": {
+                        "type": "string",
+                        "description": "Last name of the beneficiary."
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "Type of the beneficiary, indicating the type of account or method through which the beneficiary receives funds. Possible values: `BANK_ACCOUNT`, `DIGITAL_WALLET`, `CARD`, `STABLECOIN_WALLET`."
+                      }
+                    }
+                  },
+                  "beneficiary_id": {
+                    "type": "string",
+                    "description": "An Airwallex `beneficiary_id` previously generated by utilizing the Airwallex Contact API.  This may be provided in place of the `beneficiary` object and should be empty if the beneficiary fields are provided."
+                  },
+                  "client_data": {
+                    "type": "string",
+                    "description": "Free text field available to you; can be populated with any additional identifiers that may be required for the transfer."
+                  },
+                  "fee_paid_by": {
+                    "type": "string",
+                    "description": "Denotes whether `PAYER`/`BENEFICIARY` will be liable for the transfer fees, and it affects the actual amount the beneficiary receives."
+                  },
+                  "lock_rate_on_create": {
+                    "type": "boolean",
+                    "description": "Customers could choose whether to use confirmed rates for scheduled transfer with conversion. This field should only be specified when a conversion is involved.If customers do not specify this field, the default value is true. This field can either be specified to be TRUE when creating a transfer with currency conversions at a confirmed rate or FALSE if an unconfirmed rate is wanted."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "A set of key-value pairs for storing your own data together with the transfer.",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "payer": {
+                    "type": "object",
+                    "required": [
+                      "address",
+                      "entity_type"
+                    ],
+                    "description": "Details for the payer in the transfer request. If payer_id provided in the transfer request then payer should be empty.",
+                    "properties": {
+                      "additional_info": {
+                        "type": "object",
+                        "description": "Additional information about the payer.",
+                        "properties": {
+                          "business_registration_number": {
+                            "type": "string",
+                            "description": "Business registration number."
+                          },
+                          "business_registration_type": {
+                            "type": "string",
+                            "description": "Type of business as registered with the local government authority."
+                          },
+                          "external_id": {
+                            "type": "string",
+                            "description": "Unique identifier of the person in your company."
+                          },
+                          "personal_email": {
+                            "type": "string",
+                            "description": "Personal email."
+                          },
+                          "personal_id_number": {
+                            "type": "string",
+                            "description": "Personal unique identifier number."
+                          }
+                        }
+                      },
+                      "address": {
+                        "type": "object",
+                        "required": [
+                          "country_code"
+                        ],
+                        "description": "Payer's address details.",
+                        "properties": {
+                          "city": {
+                            "type": "string",
+                            "description": "Payer's city."
+                          },
+                          "country_code": {
+                            "type": "string",
+                            "description": "Payer's country code (2-letter ISO 3166-2 country code)."
+                          },
+                          "postcode": {
+                            "type": "string",
+                            "description": "Payer's post code."
+                          },
+                          "state": {
+                            "type": "string",
+                            "description": "Payer's state."
+                          },
+                          "street_address": {
+                            "type": "string",
+                            "description": "Payer's street address."
+                          }
+                        }
+                      },
+                      "company_name": {
+                        "type": "string",
+                        "description": "Company name of the payer."
+                      },
+                      "date_of_birth": {
+                        "type": "string",
+                        "description": "Payer's date of birth."
+                      },
+                      "entity_type": {
+                        "type": "string",
+                        "description": "Entity type of the payer."
+                      },
+                      "first_name": {
+                        "type": "string",
+                        "description": "First name of the payer."
+                      },
+                      "last_name": {
+                        "type": "string",
+                        "description": "Last name of the payer."
+                      }
+                    }
+                  },
+                  "payer_id": {
+                    "type": "string",
+                    "description": "An Airwallex payer_id previously generated by utilising the Airwallex Contact API.  This may be provided in place of the payer section and should be empty if the payer fields are provided."
+                  },
+                  "quote_id": {
+                    "type": "string",
+                    "description": "quote id from a previously created lockfx quote."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Reason for the transfer instruction."
+                  },
+                  "reference": {
+                    "type": "string",
+                    "description": "A user specified reference that will be displayed to the beneficiary on the transfer transaction with their bank."
+                  },
+                  "remarks": {
+                    "type": "string",
+                    "description": "Additional information about this transfer, which will not be passed to the beneficiary."
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "description": "A unique request ID specified by the client.  Payout creation requests with a `request_id` that has been used in the past 7 days are treated as duplicated payout and cannot be processed. When you are not sure about the outcome of a payout creation request, e.g. when there are network issues or system failures such as timeout, you can try to get a payout with this `request_id` to find out.    \nNote: Can be non-UUID as long as it is unique among the requests within the past 7 days."
+                  },
+                  "source_amount": {
+                    "type": "string",
+                    "description": "Source amount in `source_currency`."
+                  },
+                  "source_currency": {
+                    "type": "string",
+                    "description": "Source currency, i.e. the currency that the Payer uses to fund the transfer (3-letter ISO-4217 code)."
+                  },
+                  "swift_charge_option": {
+                    "type": "string",
+                    "description": "(For SWIFT transfers only), specify who should bear SWIFT charges, either `SHARED` (default) or `PAYER`."
+                  },
+                  "transfer_amount": {
+                    "type": "string",
+                    "description": "Transfer amount in `transfer_currency`."
+                  },
+                  "transfer_currency": {
+                    "type": "string",
+                    "description": "Transfer currency, i.e. the currency that the beneficiary receives (3-letter ISO-4217 code)."
+                  },
+                  "transfer_date": {
+                    "type": "string",
+                    "description": "Date when transfer should be made."
+                  },
+                  "transfer_method": {
+                    "type": "string",
+                    "description": "Transfer method, i.e. SWIFT, LOCAL."
+                  }
+                }
+              },
+              "examples": {
+                "default": {
+                  "value": {
+                    "application_fee_options": [
+                      {
+                        "amount": "5",
+                        "currency": "AUD",
+                        "percentage": "0.1",
+                        "source_type": "TRANSFER",
+                        "type": "FIXED"
+                      }
+                    ],
+                    "beneficiary": {
+                      "additional_info": {
+                        "business_area": "Travel",
+                        "business_phone_number": "689342234",
+                        "business_registration_number": "IT593003",
+                        "external_identifier": "<string>",
+                        "legal_rep_bank_account_number": "44250100003700000000",
+                        "legal_rep_first_name_in_chinese": "小芳",
+                        "legal_rep_id_number": "110108199304203520",
+                        "legal_rep_last_name_in_chinese": "刘",
+                        "legal_rep_mobile_number": "13651362890",
+                        "personal_email": "john.walker@gmail.com",
+                        "personal_first_name_in_chinese": "大明",
+                        "personal_id_number": "1234567890",
+                        "personal_id_type": "NATIONAL_ID",
+                        "personal_last_name_in_chinese": "李",
+                        "personal_mobile_number": "13651362890",
+                        "recipient_account_id": "<string>",
+                        "security_question": "What is the name of my second puppy?",
+                        "security_question_answer": "Scooby Doo"
+                      },
+                      "address": {
+                        "city": "Melbourne",
+                        "country_code": "AU",
+                        "postcode": "3000",
+                        "state": "VIC",
+                        "street_address": "15 William Street"
+                      },
+                      "bank_details": {
+                        "account_currency": "AUD",
+                        "account_name": "Lee Da Ming",
+                        "account_name_alias": "Lee D M",
+                        "account_number": "12750852",
+                        "account_routing_type1": "bsb",
+                        "account_routing_type2": "sort_code",
+                        "account_routing_value1": "083064",
+                        "account_routing_value2": "123456",
+                        "bank_account_category": "Checking,Savings,Vista,Maestra",
+                        "bank_branch": "Melbourne",
+                        "bank_country_code": "AU",
+                        "bank_name": "National Australia Bank",
+                        "bank_state": "<string>",
+                        "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                        "binding_mobile_number": "654897612345",
+                        "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                        "iban": "ES8023100001180000012345",
+                        "intermediary_bank_name": "National Australia Bank",
+                        "intermediary_bank_swift_code": "CTBAAU2S",
+                        "local_clearing_system": "ACH",
+                        "swift_code": "CTBAAU2S"
+                      },
+                      "card": {
+                        "brand": "VISA",
+                        "cardholder_name": "John Walker",
+                        "currency": "USD",
+                        "expiry_month": "10",
+                        "expiry_year": "2033",
+                        "number": "************1111",
+                        "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                      },
+                      "company_name": "Complete Concrete Pty Ltd",
+                      "date_of_birth": "1976-08-26",
+                      "digital_wallet": {
+                        "account_name": "John Walker Corporation",
+                        "country_code": "US",
+                        "id_type": "account_number",
+                        "id_value": "1033106816639334",
+                        "provider": "AIRWALLEX"
+                      },
+                      "entity_type": "COMPANY",
+                      "first_name": "John",
+                      "last_name": "Walker",
+                      "type": "<string>"
+                    },
+                    "beneficiary_id": "8365ea88-2946-4877-abe1-e02a1015288d",
+                    "client_data": "string",
+                    "fee_paid_by": "PAYER",
+                    "lock_rate_on_create": false,
+                    "metadata": {
+                      "order_id": "0123456789"
+                    },
+                    "payer": {
+                      "additional_info": {
+                        "business_registration_number": "EU300503",
+                        "business_registration_type": "Partnership",
+                        "external_id": "1234567890",
+                        "personal_email": "james.smith@google.com",
+                        "personal_id_number": "1234567890"
+                      },
+                      "address": {
+                        "city": "Melbourne",
+                        "country_code": "AU",
+                        "postcode": "3000",
+                        "state": "VIC",
+                        "street_address": "15 William Street"
+                      },
+                      "company_name": "Complete Concrete Pty Ltd",
+                      "date_of_birth": "1976-08-26",
+                      "entity_type": "COMPANY",
+                      "first_name": "James",
+                      "last_name": "Smith"
+                    },
+                    "payer_id": "46c22228-5831-4c53-a4fa-a3ab4954877c",
+                    "quote_id": "<string>",
+                    "reason": "travel",
+                    "reference": "PMT1936398",
+                    "remarks": "Any information",
+                    "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+                    "source_amount": "10000",
+                    "source_currency": "AUD",
+                    "swift_charge_option": "SHARED",
+                    "transfer_amount": "10000",
+                    "transfer_currency": "AUD",
+                    "transfer_date": "2017-03-20",
+                    "transfer_method": "SWIFT"
+                  }
+                }
+              }
+            }
+          },
+          "description": "createTransferRequestDto.",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "amount_beneficiary_receives": 99996,
+                      "amount_payer_pays": 10004,
+                      "application_fee_options": [
+                        {
+                          "amount": "5",
+                          "currency": "AUD",
+                          "percentage": "0.1",
+                          "source_type": "TRANSFER",
+                          "type": "FIXED"
+                        }
+                      ],
+                      "application_fees": [
+                        {
+                          "amount": "5",
+                          "currency": "AUD",
+                          "source_type": "TRANSFER"
+                        }
+                      ],
+                      "batch_transfer_id": "d9df6d02-4116-4376-82c7-064159cc878e",
+                      "beneficiary": {
+                        "additional_info": {
+                          "business_area": "Travel",
+                          "business_phone_number": "689342234",
+                          "business_registration_number": "IT593003",
+                          "external_identifier": "<string>",
+                          "legal_rep_bank_account_number": "44250100003700000000",
+                          "legal_rep_first_name_in_chinese": "小芳",
+                          "legal_rep_id_number": "110108199304203520",
+                          "legal_rep_last_name_in_chinese": "刘",
+                          "legal_rep_mobile_number": "13651362890",
+                          "personal_email": "john.walker@gmail.com",
+                          "personal_first_name_in_chinese": "大明",
+                          "personal_id_number": "1234567890",
+                          "personal_id_type": "NATIONAL_ID",
+                          "personal_last_name_in_chinese": "李",
+                          "personal_mobile_number": "13651362890",
+                          "recipient_account_id": "<string>",
+                          "security_question": "What is the name of my second puppy?",
+                          "security_question_answer": "Scooby Doo"
+                        },
+                        "address": {
+                          "city": "Melbourne",
+                          "country_code": "AU",
+                          "postcode": "3000",
+                          "state": "VIC",
+                          "street_address": "15 William Street"
+                        },
+                        "bank_details": {
+                          "account_currency": "AUD",
+                          "account_name": "Lee Da Ming",
+                          "account_name_alias": "Lee D M",
+                          "account_number": "12750852",
+                          "account_routing_type1": "bsb",
+                          "account_routing_type2": "sort_code",
+                          "account_routing_value1": "083064",
+                          "account_routing_value2": "123456",
+                          "bank_account_category": "Checking,Savings,Vista,Maestra",
+                          "bank_branch": "Melbourne",
+                          "bank_country_code": "AU",
+                          "bank_name": "National Australia Bank",
+                          "bank_state": "<string>",
+                          "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                          "binding_mobile_number": "654897612345",
+                          "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                          "iban": "ES8023100001180000012345",
+                          "intermediary_bank_name": "National Australia Bank",
+                          "intermediary_bank_swift_code": "CTBAAU2S",
+                          "local_clearing_system": "ACH",
+                          "swift_code": "CTBAAU2S"
+                        },
+                        "card": {
+                          "brand": "VISA",
+                          "cardholder_name": "John Walker",
+                          "currency": "USD",
+                          "expiry_month": "10",
+                          "expiry_year": "2033",
+                          "number": "************1111",
+                          "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                        },
+                        "company_name": "Complete Concrete Pty Ltd",
+                        "date_of_birth": "1976-08-26",
+                        "digital_wallet": {
+                          "account_name": "John Walker Corporation",
+                          "country_code": "US",
+                          "id_type": "account_number",
+                          "id_value": "1033106816639334",
+                          "provider": "AIRWALLEX"
+                        },
+                        "entity_type": "COMPANY",
+                        "first_name": "John",
+                        "last_name": "Walker",
+                        "type": "<string>"
+                      },
+                      "beneficiary_id": "<uuid>",
+                      "conversion": {
+                        "currency_pair": "USDEUR",
+                        "rate": 0.761223
+                      },
+                      "created_at": "2017-03-22T16:08:02+1100",
+                      "dispatch_date": "2017-03-29",
+                      "dispatch_info": {
+                        "external_reference": "CHK-100012345",
+                        "external_reference_type": "PAPER_CHECK_NUMBER"
+                      },
+                      "failure": {
+                        "code": "90502",
+                        "message": "Unable to process due to risk concerns.",
+                        "details": {
+                          "type": "TM_SUSPEND",
+                          "reason_codes": [
+                            "EXPIRED_TRANSACTION_RFI"
+                          ]
+                        }
+                      },
+                      "fee_amount": 4,
+                      "fee_currency": "AUD",
+                      "fee_paid_by": "PAYER",
+                      "funding": {
+                        "deposit_type": "DIRECT_DEBIT",
+                        "failure_details": {
+                          "code": "insufficient_funds",
+                          "iso_code": "AM04",
+                          "provider_failure_details": {
+                            "code": "R01",
+                            "local_clearing_system": "US_ACH",
+                            "message": "INSUFFICIENT FUNDS"
+                          }
+                        },
+                        "failure_reason": "regulatory_reason",
+                        "funding_source_id": "b3856846-31b0-44d8-855d-e0eedf532282",
+                        "status": "FUNDED"
+                      },
+                      "id": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede",
+                      "lock_rate_on_create": false,
+                      "metadata": {
+                        "order_id": "0123456789"
+                      },
+                      "payer": {
+                        "additional_info": {
+                          "business_registration_number": "EU300503",
+                          "business_registration_type": "Partnership",
+                          "external_id": "1234567890",
+                          "personal_email": "james.smith@google.com",
+                          "personal_id_number": "1234567890"
+                        },
+                        "address": {
+                          "city": "Melbourne",
+                          "country_code": "AU",
+                          "postcode": "3000",
+                          "state": "VIC",
+                          "street_address": "15 William Street"
+                        },
+                        "company_name": "Complete Concrete Pty Ltd",
+                        "date_of_birth": "1976-08-26",
+                        "entity_type": "COMPANY",
+                        "first_name": "James",
+                        "last_name": "Smith"
+                      },
+                      "payer_id": "<uuid>",
+                      "prepayment": {
+                        "amount": 12.34,
+                        "currency": "USD"
+                      },
+                      "reason": "travel",
+                      "reference": "PMT1936398",
+                      "remarks": "Any information",
+                      "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+                      "short_reference_id": "20170322-9F6ML2",
+                      "source_amount": 10000,
+                      "source_currency": "AUD",
+                      "status": "PROCESSING",
+                      "swift_charge_option": "SHARED",
+                      "transfer_amount": 10000,
+                      "transfer_currency": "AUD",
+                      "transfer_date": "2017-03-24",
+                      "transfer_method": "SWIFT",
+                      "updated_at": "2017-03-24T18:00:02+1100"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[\"request_id_duplicate\"\n,\"declaration_required\"\n,\"amount_beneficiary_receives_below_limit\"\n,\"amount_below_transfer_method_limit\"\n,\"source_amount_below_account_limit\"\n,\"transfer_amount_below_account_limit\"\n,\"amount_beneficiary_receives_above_cumulative_limit\"\n,\"amount_above_transfer_method_limit\"\n,\"source_amount_above_account_limit\"\n,\"transfer_amount_above_account_limit\"\n,\"fee_unknown\"\n,\"service_unavailable\"\n,\"currency_pair_invalid\"\n,\"order_info_unsupported\"\n,\"order_reconciliation_failed\"\n,\"transfer_currency_unsupported\"\n,\"source_currency_unsupported\"\n,\"open_position_limit_exceeded\"\n,\"balance_insufficient\"\n,\"payout_method_unsupported\"\n,\"payer_unsupported\"\n,\"validation_failed\"\n,\"quote_id_invalid\"\n,\"quote_id_required\"\n,\"beneficiary_type_unsupported\"\n,\"order_amount_insufficient\"\n,\"quote_expired\"\n,\"transfer_date_invalid\"\n]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "declaration_required": {
+                    "value": {
+                      "code": "declaration_required",
+                      "details": {},
+                      "message": "Complete the CN local transfer declaration process before creating the transfer.",
+                      "source": "declaration_required"
+                    }
+                  },
+                  "request_id_duplicate": {
+                    "value": {
+                      "code": "request_id_duplicate",
+                      "source": "request_id",
+                      "message": "request_id 90459a20-d35d-3149-a998-795074c3971d has been used in the past.  Please use a different request_id for this request",
+                      "details": {
+                        "request_id": "90459a20-d35d-3149-a998-795074c3971d",
+                        "id": "27cb219e-ec23-4aa3-8a86-89c40dad08bc"
+                      }
+                    }
+                  },
+                  "validation_failed": {
+                    "value": {
+                      "code": "validation_failed",
+                      "message": "validation_failed",
+                      "details": {
+                        "errors": [
+                          {
+                            "source": "beneficiary.address.postcode",
+                            "code": "030"
+                          },
+                          {
+                            "source": "beneficiary.address.street_address",
+                            "code": "018",
+                            "params": {
+                              "length_min": 5,
+                              "length_max": 200
+                            }
+                          },
+                          {
+                            "source": "beneficiary.address.street_address",
+                            "code": "028"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[\"credentials_invalid\"\n,\"credentials_expired\"]"
+          },
+          "409": {
+            "description": "[\"request_pending\"]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests"
+          },
+          "500": {
+            "description": "Service unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-examples": [
+          {
+            "key": "default",
+            "name": "",
+            "method": "POST",
+            "uri": "/api/v1/transfers/create",
+            "request_headers": {
+              "Authorization": "Bearer {{ACCESS_TOKEN}}",
+              "Content-Type": "application/json"
+            },
+            "status_code": 201,
+            "reason_phrase": "Created",
+            "request_body": {
+              "application_fee_options": [
+                {
+                  "amount": "5",
+                  "currency": "AUD",
+                  "percentage": "0.1",
+                  "source_type": "TRANSFER",
+                  "type": "FIXED"
+                }
+              ],
+              "beneficiary": {
+                "additional_info": {
+                  "business_area": "Travel",
+                  "business_phone_number": "689342234",
+                  "business_registration_number": "IT593003",
+                  "external_identifier": "<string>",
+                  "legal_rep_bank_account_number": "44250100003700000000",
+                  "legal_rep_first_name_in_chinese": "小芳",
+                  "legal_rep_id_number": "110108199304203520",
+                  "legal_rep_last_name_in_chinese": "刘",
+                  "legal_rep_mobile_number": "13651362890",
+                  "personal_email": "john.walker@gmail.com",
+                  "personal_first_name_in_chinese": "大明",
+                  "personal_id_number": "1234567890",
+                  "personal_id_type": "NATIONAL_ID",
+                  "personal_last_name_in_chinese": "李",
+                  "personal_mobile_number": "13651362890",
+                  "recipient_account_id": "<string>",
+                  "security_question": "What is the name of my second puppy?",
+                  "security_question_answer": "Scooby Doo"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "bank_details": {
+                  "account_currency": "AUD",
+                  "account_name": "Lee Da Ming",
+                  "account_name_alias": "Lee D M",
+                  "account_number": "12750852",
+                  "account_routing_type1": "bsb",
+                  "account_routing_type2": "sort_code",
+                  "account_routing_value1": "083064",
+                  "account_routing_value2": "123456",
+                  "bank_account_category": "Checking,Savings,Vista,Maestra",
+                  "bank_branch": "Melbourne",
+                  "bank_country_code": "AU",
+                  "bank_name": "National Australia Bank",
+                  "bank_state": "<string>",
+                  "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                  "binding_mobile_number": "654897612345",
+                  "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                  "iban": "ES8023100001180000012345",
+                  "intermediary_bank_name": "National Australia Bank",
+                  "intermediary_bank_swift_code": "CTBAAU2S",
+                  "local_clearing_system": "ACH",
+                  "swift_code": "CTBAAU2S"
+                },
+                "card": {
+                  "brand": "VISA",
+                  "cardholder_name": "John Walker",
+                  "currency": "USD",
+                  "expiry_month": "10",
+                  "expiry_year": "2033",
+                  "number": "************1111",
+                  "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "digital_wallet": {
+                  "account_name": "John Walker Corporation",
+                  "country_code": "US",
+                  "id_type": "account_number",
+                  "id_value": "1033106816639334",
+                  "provider": "AIRWALLEX"
+                },
+                "entity_type": "COMPANY",
+                "first_name": "John",
+                "last_name": "Walker",
+                "type": "<string>"
+              },
+              "beneficiary_id": "8365ea88-2946-4877-abe1-e02a1015288d",
+              "client_data": "string",
+              "fee_paid_by": "PAYER",
+              "lock_rate_on_create": false,
+              "metadata": {
+                "order_id": "0123456789"
+              },
+              "payer": {
+                "additional_info": {
+                  "business_registration_number": "EU300503",
+                  "business_registration_type": "Partnership",
+                  "external_id": "1234567890",
+                  "personal_email": "james.smith@google.com",
+                  "personal_id_number": "1234567890"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "entity_type": "COMPANY",
+                "first_name": "James",
+                "last_name": "Smith"
+              },
+              "payer_id": "46c22228-5831-4c53-a4fa-a3ab4954877c",
+              "quote_id": "<string>",
+              "reason": "travel",
+              "reference": "PMT1936398",
+              "remarks": "Any information",
+              "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+              "source_amount": "10000",
+              "source_currency": "AUD",
+              "swift_charge_option": "SHARED",
+              "transfer_amount": "10000",
+              "transfer_currency": "AUD",
+              "transfer_date": "2017-03-20",
+              "transfer_method": "SWIFT"
+            },
+            "response_body": {
+              "amount_beneficiary_receives": 99996,
+              "amount_payer_pays": 10004,
+              "application_fee_options": [
+                {
+                  "amount": "5",
+                  "currency": "AUD",
+                  "percentage": "0.1",
+                  "source_type": "TRANSFER",
+                  "type": "FIXED"
+                }
+              ],
+              "application_fees": [
+                {
+                  "amount": "5",
+                  "currency": "AUD",
+                  "source_type": "TRANSFER"
+                }
+              ],
+              "batch_transfer_id": "d9df6d02-4116-4376-82c7-064159cc878e",
+              "beneficiary": {
+                "additional_info": {
+                  "business_area": "Travel",
+                  "business_phone_number": "689342234",
+                  "business_registration_number": "IT593003",
+                  "external_identifier": "<string>",
+                  "legal_rep_bank_account_number": "44250100003700000000",
+                  "legal_rep_first_name_in_chinese": "小芳",
+                  "legal_rep_id_number": "110108199304203520",
+                  "legal_rep_last_name_in_chinese": "刘",
+                  "legal_rep_mobile_number": "13651362890",
+                  "personal_email": "john.walker@gmail.com",
+                  "personal_first_name_in_chinese": "大明",
+                  "personal_id_number": "1234567890",
+                  "personal_id_type": "NATIONAL_ID",
+                  "personal_last_name_in_chinese": "李",
+                  "personal_mobile_number": "13651362890",
+                  "recipient_account_id": "<string>",
+                  "security_question": "What is the name of my second puppy?",
+                  "security_question_answer": "Scooby Doo"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "bank_details": {
+                  "account_currency": "AUD",
+                  "account_name": "Lee Da Ming",
+                  "account_name_alias": "Lee D M",
+                  "account_number": "12750852",
+                  "account_routing_type1": "bsb",
+                  "account_routing_type2": "sort_code",
+                  "account_routing_value1": "083064",
+                  "account_routing_value2": "123456",
+                  "bank_account_category": "Checking,Savings,Vista,Maestra",
+                  "bank_branch": "Melbourne",
+                  "bank_country_code": "AU",
+                  "bank_name": "National Australia Bank",
+                  "bank_state": "<string>",
+                  "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                  "binding_mobile_number": "654897612345",
+                  "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                  "iban": "ES8023100001180000012345",
+                  "intermediary_bank_name": "National Australia Bank",
+                  "intermediary_bank_swift_code": "CTBAAU2S",
+                  "local_clearing_system": "ACH",
+                  "swift_code": "CTBAAU2S"
+                },
+                "card": {
+                  "brand": "VISA",
+                  "cardholder_name": "John Walker",
+                  "currency": "USD",
+                  "expiry_month": "10",
+                  "expiry_year": "2033",
+                  "number": "************1111",
+                  "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "digital_wallet": {
+                  "account_name": "John Walker Corporation",
+                  "country_code": "US",
+                  "id_type": "account_number",
+                  "id_value": "1033106816639334",
+                  "provider": "AIRWALLEX"
+                },
+                "entity_type": "COMPANY",
+                "first_name": "John",
+                "last_name": "Walker",
+                "type": "<string>"
+              },
+              "beneficiary_id": "<uuid>",
+              "conversion": {
+                "currency_pair": "USDEUR",
+                "rate": 0.761223
+              },
+              "created_at": "2017-03-22T16:08:02+1100",
+              "dispatch_date": "2017-03-29",
+              "dispatch_info": {
+                "external_reference": "CHK-100012345",
+                "external_reference_type": "PAPER_CHECK_NUMBER"
+              },
+              "failure": {
+                "code": "90502",
+                "message": "Unable to process due to risk concerns.",
+                "details": {
+                  "type": "TM_SUSPEND",
+                  "reason_codes": [
+                    "EXPIRED_TRANSACTION_RFI"
+                  ]
+                }
+              },
+              "fee_amount": 4,
+              "fee_currency": "AUD",
+              "fee_paid_by": "PAYER",
+              "funding": {
+                "deposit_type": "DIRECT_DEBIT",
+                "failure_details": {
+                  "code": "insufficient_funds",
+                  "iso_code": "AM04",
+                  "provider_failure_details": {
+                    "code": "R01",
+                    "local_clearing_system": "US_ACH",
+                    "message": "INSUFFICIENT FUNDS"
+                  }
+                },
+                "failure_reason": "regulatory_reason",
+                "funding_source_id": "b3856846-31b0-44d8-855d-e0eedf532282",
+                "status": "FUNDED"
+              },
+              "id": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede",
+              "lock_rate_on_create": false,
+              "metadata": {
+                "order_id": "0123456789"
+              },
+              "payer": {
+                "additional_info": {
+                  "business_registration_number": "EU300503",
+                  "business_registration_type": "Partnership",
+                  "external_id": "1234567890",
+                  "personal_email": "james.smith@google.com",
+                  "personal_id_number": "1234567890"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "entity_type": "COMPANY",
+                "first_name": "James",
+                "last_name": "Smith"
+              },
+              "payer_id": "<uuid>",
+              "prepayment": {
+                "amount": 12.34,
+                "currency": "USD"
+              },
+              "reason": "travel",
+              "reference": "PMT1936398",
+              "remarks": "Any information",
+              "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+              "short_reference_id": "20170322-9F6ML2",
+              "source_amount": 10000,
+              "source_currency": "AUD",
+              "status": "PROCESSING",
+              "swift_charge_option": "SHARED",
+              "transfer_amount": 10000,
+              "transfer_currency": "AUD",
+              "transfer_date": "2017-03-24",
+              "transfer_method": "SWIFT",
+              "updated_at": "2017-03-24T18:00:02+1100"
+            }
+          },
+          {
+            "key": "declaration_required",
+            "name": "Declaration Required",
+            "method": "POST",
+            "uri": "/api/v1/transfers/create",
+            "status_code": 400,
+            "reason_phrase": "Bad Request",
+            "response_body": {
+              "code": "declaration_required",
+              "details": {},
+              "message": "Complete the CN local transfer declaration process before creating the transfer.",
+              "source": "declaration_required"
+            }
+          },
+          {
+            "key": "request_id_duplicate",
+            "name": "Request ID Duplicate",
+            "method": "POST",
+            "uri": "/api/v1/transfers/create",
+            "status_code": 400,
+            "reason_phrase": "Bad Request",
+            "response_body": {
+              "code": "request_id_duplicate",
+              "source": "request_id",
+              "message": "request_id 90459a20-d35d-3149-a998-795074c3971d has been used in the past.  Please use a different request_id for this request",
+              "details": {
+                "request_id": "90459a20-d35d-3149-a998-795074c3971d",
+                "id": "27cb219e-ec23-4aa3-8a86-89c40dad08bc"
+              }
+            }
+          },
+          {
+            "key": "validation_failed",
+            "name": "Validation Failed",
+            "method": "POST",
+            "uri": "/api/v1/transfers/create",
+            "status_code": 400,
+            "reason_phrase": "Bad Request",
+            "response_body": {
+              "code": "validation_failed",
+              "message": "validation_failed",
+              "details": {
+                "errors": [
+                  {
+                    "source": "beneficiary.address.postcode",
+                    "code": "030"
+                  },
+                  {
+                    "source": "beneficiary.address.street_address",
+                    "code": "018",
+                    "params": {
+                      "length_min": 5,
+                      "length_max": 200
+                    }
+                  },
+                  {
+                    "source": "beneficiary.address.street_address",
+                    "code": "028"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "x-oauthSupported": true,
+        "x-resourceLevel": "account"
+      }
+    },
+    "/api/v1/transfers/{id}": {
+      "get": {
+        "tags": [
+          "Payouts > Transfers"
+        ],
+        "summary": "2|Retrieve a Transfer",
+        "description": "Get a specific transfer by specifying the Airwallex `id`.",
+        "operationId": "retrieveTransfer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Unique identifier of the transfer to retrieve.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "default": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede"
+            },
+            "examples": {
+              "default": {
+                "value": "transfer_id"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "amount_beneficiary_receives": 99996,
+                      "amount_payer_pays": 10004,
+                      "application_fee_options": [
+                        {
+                          "amount": "5",
+                          "currency": "AUD",
+                          "percentage": "0.1",
+                          "source_type": "TRANSFER",
+                          "type": "FIXED"
+                        }
+                      ],
+                      "application_fees": [
+                        {
+                          "amount": "5",
+                          "currency": "AUD",
+                          "source_type": "TRANSFER"
+                        }
+                      ],
+                      "batch_transfer_id": "d9df6d02-4116-4376-82c7-064159cc878e",
+                      "beneficiary": {
+                        "additional_info": {
+                          "business_area": "Travel",
+                          "business_phone_number": "689342234",
+                          "business_registration_number": "IT593003",
+                          "external_identifier": "<string>",
+                          "legal_rep_bank_account_number": "44250100003700000000",
+                          "legal_rep_first_name_in_chinese": "小芳",
+                          "legal_rep_id_number": "110108199304203520",
+                          "legal_rep_last_name_in_chinese": "刘",
+                          "legal_rep_mobile_number": "13651362890",
+                          "personal_email": "john.walker@gmail.com",
+                          "personal_first_name_in_chinese": "大明",
+                          "personal_id_number": "1234567890",
+                          "personal_id_type": "NATIONAL_ID",
+                          "personal_last_name_in_chinese": "李",
+                          "personal_mobile_number": "13651362890",
+                          "recipient_account_id": "<string>",
+                          "security_question": "What is the name of my second puppy?",
+                          "security_question_answer": "Scooby Doo"
+                        },
+                        "address": {
+                          "city": "Melbourne",
+                          "country_code": "AU",
+                          "postcode": "3000",
+                          "state": "VIC",
+                          "street_address": "15 William Street"
+                        },
+                        "bank_details": {
+                          "account_currency": "AUD",
+                          "account_name": "Lee Da Ming",
+                          "account_name_alias": "Lee D M",
+                          "account_number": "12750852",
+                          "account_routing_type1": "bsb",
+                          "account_routing_type2": "sort_code",
+                          "account_routing_value1": "083064",
+                          "account_routing_value2": "123456",
+                          "bank_account_category": "Checking,Savings,Vista,Maestra",
+                          "bank_branch": "Melbourne",
+                          "bank_country_code": "AU",
+                          "bank_name": "National Australia Bank",
+                          "bank_state": "<string>",
+                          "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                          "binding_mobile_number": "654897612345",
+                          "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                          "iban": "ES8023100001180000012345",
+                          "intermediary_bank_name": "National Australia Bank",
+                          "intermediary_bank_swift_code": "CTBAAU2S",
+                          "local_clearing_system": "ACH",
+                          "swift_code": "CTBAAU2S"
+                        },
+                        "card": {
+                          "brand": "VISA",
+                          "cardholder_name": "John Walker",
+                          "currency": "USD",
+                          "expiry_month": "10",
+                          "expiry_year": "2033",
+                          "number": "************1111",
+                          "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                        },
+                        "company_name": "Complete Concrete Pty Ltd",
+                        "date_of_birth": "1976-08-26",
+                        "digital_wallet": {
+                          "account_name": "John Walker Corporation",
+                          "country_code": "US",
+                          "id_type": "account_number",
+                          "id_value": "1033106816639334",
+                          "provider": "AIRWALLEX"
+                        },
+                        "entity_type": "COMPANY",
+                        "first_name": "John",
+                        "last_name": "Walker",
+                        "type": "<string>"
+                      },
+                      "beneficiary_id": "<uuid>",
+                      "conversion": {
+                        "currency_pair": "USDEUR",
+                        "rate": 0.761223
+                      },
+                      "created_at": "2017-03-22T16:08:02+1100",
+                      "dispatch_date": "2017-03-29",
+                      "dispatch_info": {
+                        "external_reference": "CHK-100012345",
+                        "external_reference_type": "PAPER_CHECK_NUMBER"
+                      },
+                      "failure": {
+                        "code": "90502",
+                        "message": "Unable to process due to risk concerns.",
+                        "details": {
+                          "type": "TM_SUSPEND",
+                          "reason_codes": [
+                            "EXPIRED_TRANSACTION_RFI"
+                          ]
+                        }
+                      },
+                      "fee_amount": 4,
+                      "fee_currency": "AUD",
+                      "fee_paid_by": "PAYER",
+                      "funding": {
+                        "deposit_type": "DIRECT_DEBIT",
+                        "failure_details": {
+                          "code": "insufficient_funds",
+                          "iso_code": "AM04",
+                          "provider_failure_details": {
+                            "code": "R01",
+                            "local_clearing_system": "US_ACH",
+                            "message": "INSUFFICIENT FUNDS"
+                          }
+                        },
+                        "failure_reason": "regulatory_reason",
+                        "funding_source_id": "b3856846-31b0-44d8-855d-e0eedf532282",
+                        "status": "FUNDED"
+                      },
+                      "id": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede",
+                      "lock_rate_on_create": false,
+                      "metadata": {
+                        "order_id": "0123456789"
+                      },
+                      "payer": {
+                        "additional_info": {
+                          "business_registration_number": "EU300503",
+                          "business_registration_type": "Partnership",
+                          "external_id": "1234567890",
+                          "personal_email": "james.smith@google.com",
+                          "personal_id_number": "1234567890"
+                        },
+                        "address": {
+                          "city": "Melbourne",
+                          "country_code": "AU",
+                          "postcode": "3000",
+                          "state": "VIC",
+                          "street_address": "15 William Street"
+                        },
+                        "company_name": "Complete Concrete Pty Ltd",
+                        "date_of_birth": "1976-08-26",
+                        "entity_type": "COMPANY",
+                        "first_name": "James",
+                        "last_name": "Smith"
+                      },
+                      "payer_id": "<uuid>",
+                      "prepayment": {
+                        "amount": 12.34,
+                        "currency": "USD"
+                      },
+                      "reason": "travel",
+                      "reference": "PMT1936398",
+                      "remarks": "Any information",
+                      "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+                      "short_reference_id": "20170322-9F6ML2",
+                      "source_amount": 10000,
+                      "source_currency": "AUD",
+                      "status": "PROCESSING",
+                      "swift_charge_option": "SHARED",
+                      "transfer_amount": 10000,
+                      "transfer_currency": "AUD",
+                      "transfer_date": "2017-03-24",
+                      "transfer_method": "SWIFT",
+                      "updated_at": "2017-03-24T18:00:02+1100"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[\"field_required\"\n,\"invalid_argument\"\n]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[\"credentials_invalid\"\n,\"credentials_expired\"]"
+          },
+          "429": {
+            "description": "Too many requests"
+          },
+          "500": {
+            "description": "Service unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-examples": [
+          {
+            "key": "default",
+            "name": "",
+            "method": "GET",
+            "uri": "/api/v1/transfers/transfer_id",
+            "request_headers": {
+              "Authorization": "Bearer {{ACCESS_TOKEN}}",
+              "Content-Type": "application/json"
+            },
+            "status_code": 200,
+            "reason_phrase": "OK",
+            "response_body": {
+              "amount_beneficiary_receives": 99996,
+              "amount_payer_pays": 10004,
+              "application_fee_options": [
+                {
+                  "amount": "5",
+                  "currency": "AUD",
+                  "percentage": "0.1",
+                  "source_type": "TRANSFER",
+                  "type": "FIXED"
+                }
+              ],
+              "application_fees": [
+                {
+                  "amount": "5",
+                  "currency": "AUD",
+                  "source_type": "TRANSFER"
+                }
+              ],
+              "batch_transfer_id": "d9df6d02-4116-4376-82c7-064159cc878e",
+              "beneficiary": {
+                "additional_info": {
+                  "business_area": "Travel",
+                  "business_phone_number": "689342234",
+                  "business_registration_number": "IT593003",
+                  "external_identifier": "<string>",
+                  "legal_rep_bank_account_number": "44250100003700000000",
+                  "legal_rep_first_name_in_chinese": "小芳",
+                  "legal_rep_id_number": "110108199304203520",
+                  "legal_rep_last_name_in_chinese": "刘",
+                  "legal_rep_mobile_number": "13651362890",
+                  "personal_email": "john.walker@gmail.com",
+                  "personal_first_name_in_chinese": "大明",
+                  "personal_id_number": "1234567890",
+                  "personal_id_type": "NATIONAL_ID",
+                  "personal_last_name_in_chinese": "李",
+                  "personal_mobile_number": "13651362890",
+                  "recipient_account_id": "<string>",
+                  "security_question": "What is the name of my second puppy?",
+                  "security_question_answer": "Scooby Doo"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "bank_details": {
+                  "account_currency": "AUD",
+                  "account_name": "Lee Da Ming",
+                  "account_name_alias": "Lee D M",
+                  "account_number": "12750852",
+                  "account_routing_type1": "bsb",
+                  "account_routing_type2": "sort_code",
+                  "account_routing_value1": "083064",
+                  "account_routing_value2": "123456",
+                  "bank_account_category": "Checking,Savings,Vista,Maestra",
+                  "bank_branch": "Melbourne",
+                  "bank_country_code": "AU",
+                  "bank_name": "National Australia Bank",
+                  "bank_state": "<string>",
+                  "bank_street_address": "500 Bourke Street, Melbourne 3000, Australia",
+                  "binding_mobile_number": "654897612345",
+                  "fingerprint": "2e99758548972a8e8822ad47fa1017ff72f06f3ff6a016851f45c398732bc50c",
+                  "iban": "ES8023100001180000012345",
+                  "intermediary_bank_name": "National Australia Bank",
+                  "intermediary_bank_swift_code": "CTBAAU2S",
+                  "local_clearing_system": "ACH",
+                  "swift_code": "CTBAAU2S"
+                },
+                "card": {
+                  "brand": "VISA",
+                  "cardholder_name": "John Walker",
+                  "currency": "USD",
+                  "expiry_month": "10",
+                  "expiry_year": "2033",
+                  "number": "************1111",
+                  "token": "AKvN4TqxI04SNFZ+oYRXaECtDA=="
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "digital_wallet": {
+                  "account_name": "John Walker Corporation",
+                  "country_code": "US",
+                  "id_type": "account_number",
+                  "id_value": "1033106816639334",
+                  "provider": "AIRWALLEX"
+                },
+                "entity_type": "COMPANY",
+                "first_name": "John",
+                "last_name": "Walker",
+                "type": "<string>"
+              },
+              "beneficiary_id": "<uuid>",
+              "conversion": {
+                "currency_pair": "USDEUR",
+                "rate": 0.761223
+              },
+              "created_at": "2017-03-22T16:08:02+1100",
+              "dispatch_date": "2017-03-29",
+              "dispatch_info": {
+                "external_reference": "CHK-100012345",
+                "external_reference_type": "PAPER_CHECK_NUMBER"
+              },
+              "failure": {
+                "code": "90502",
+                "message": "Unable to process due to risk concerns.",
+                "details": {
+                  "type": "TM_SUSPEND",
+                  "reason_codes": [
+                    "EXPIRED_TRANSACTION_RFI"
+                  ]
+                }
+              },
+              "fee_amount": 4,
+              "fee_currency": "AUD",
+              "fee_paid_by": "PAYER",
+              "funding": {
+                "deposit_type": "DIRECT_DEBIT",
+                "failure_details": {
+                  "code": "insufficient_funds",
+                  "iso_code": "AM04",
+                  "provider_failure_details": {
+                    "code": "R01",
+                    "local_clearing_system": "US_ACH",
+                    "message": "INSUFFICIENT FUNDS"
+                  }
+                },
+                "failure_reason": "regulatory_reason",
+                "funding_source_id": "b3856846-31b0-44d8-855d-e0eedf532282",
+                "status": "FUNDED"
+              },
+              "id": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede",
+              "lock_rate_on_create": false,
+              "metadata": {
+                "order_id": "0123456789"
+              },
+              "payer": {
+                "additional_info": {
+                  "business_registration_number": "EU300503",
+                  "business_registration_type": "Partnership",
+                  "external_id": "1234567890",
+                  "personal_email": "james.smith@google.com",
+                  "personal_id_number": "1234567890"
+                },
+                "address": {
+                  "city": "Melbourne",
+                  "country_code": "AU",
+                  "postcode": "3000",
+                  "state": "VIC",
+                  "street_address": "15 William Street"
+                },
+                "company_name": "Complete Concrete Pty Ltd",
+                "date_of_birth": "1976-08-26",
+                "entity_type": "COMPANY",
+                "first_name": "James",
+                "last_name": "Smith"
+              },
+              "payer_id": "<uuid>",
+              "prepayment": {
+                "amount": 12.34,
+                "currency": "USD"
+              },
+              "reason": "travel",
+              "reference": "PMT1936398",
+              "remarks": "Any information",
+              "request_id": "7f687fe6-dcf4-4462-92fa-80335301d9d2",
+              "short_reference_id": "20170322-9F6ML2",
+              "source_amount": 10000,
+              "source_currency": "AUD",
+              "status": "PROCESSING",
+              "swift_charge_option": "SHARED",
+              "transfer_amount": 10000,
+              "transfer_currency": "AUD",
+              "transfer_date": "2017-03-24",
+              "transfer_method": "SWIFT",
+              "updated_at": "2017-03-24T18:00:02+1100"
+            }
+          }
+        ],
+        "x-oauthSupported": true,
+        "x-resourceLevel": "account"
+      }
+    },
+    "/api/v1/transfers/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Payouts > Transfers"
+        ],
+        "summary": "6|Cancel a Transfer",
+        "description": "Cancel a transfer by specifying the `id`.",
+        "operationId": "transfers_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Unique identifier of the transfer to cancel.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "default": "d9af1614-a6a1-4d45-aae7-6858fc6d9ede"
+            },
+            "examples": {
+              "default": {
+                "value": "transfer_id"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[\"transfer_not_found\"\n,\"update_unsupported\"\n,\"service_unavailable\"\n]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[\"credentials_invalid\"\n,\"credentials_expired\"]"
+          },
+          "429": {
+            "description": "Too many requests"
+          },
+          "500": {
+            "description": "Service unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-examples": [
+          {
+            "key": "default",
+            "name": "",
+            "method": "POST",
+            "uri": "/api/v1/transfers/transfer_id/cancel",
+            "request_headers": {
+              "Authorization": "Bearer {{ACCESS_TOKEN}}",
+              "Content-Type": "application/json"
+            },
+            "status_code": 200,
+            "reason_phrase": "OK"
+          }
+        ],
+        "x-oauthSupported": true,
+        "x-resourceLevel": "account"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Obtain a token via `POST /api/v1/authentication/login` with your API key and client unique identifier. Pass it as `Authorization: Bearer {{ACCESS_TOKEN}}`. Tokens expire after a configurable duration."
+      }
+    },
+    "schemas": {
+      "Transfer": {
+        "type": "object",
+        "required": [
+          "amount_beneficiary_receives",
+          "amount_payer_pays",
+          "beneficiary",
+          "created_at",
+          "fee_amount",
+          "fee_currency",
+          "fee_paid_by",
+          "funding",
+          "id",
+          "payer",
+          "reason",
+          "reference",
+          "request_id",
+          "short_reference_id",
+          "source_amount",
+          "source_currency",
+          "status",
+          "transfer_amount",
+          "transfer_currency",
+          "transfer_date",
+          "transfer_method",
+          "updated_at"
+        ],
+        "properties": {
+          "amount_beneficiary_receives": {
+            "type": "number",
+            "description": "The total amount (in transfer `transfer_currency`) the beneficiary receives for this transfer, and is governed by value specified in `fee_paid_by`, i.e. if `fee_paid_by` is `PAYER`, then the beneficiary receives the exact same `transfer_amount` since payer is responsible for the transfer fee.  Otherwise, beneficiary receives `transfer_amount - fee` as the fee is implicitly passed onto the beneficiary"
+          },
+          "amount_payer_pays": {
+            "type": "number",
+            "description": "The total amount (in `source_currency`) the payer has to pay for making this transfer. For example, if `fee_paid_by` is `PAYER` and FX conversion is not involved, then this is the sum of `transfer_amount + fee` as the payer is responsible for the fee.  Otherwise this field is the same as `transfer_amount`"
+          },
+          "application_fee_options": {
+            "type": "array",
+            "description": "The application fee options applied to this transfer.",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationFeeOption"
+            }
+          },
+          "application_fees": {
+            "type": "array",
+            "description": "Application fees in this transfer.",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationFee"
+            }
+          },
+          "batch_transfer_id": {
+            "type": "string",
+            "description": "Unique identifier of the batch containing the transfer."
+          },
+          "beneficiary": {
+            "$ref": "#/components/schemas/Payouts_Beneficiary",
+            "description": "Details of the beneficiary"
+          },
+          "beneficiary_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "beneficiary_id of the beneficiary contact used to create this transfer"
+          },
+          "conversion": {
+            "$ref": "#/components/schemas/UnderlyingConversion",
+            "description": "Conversion details of a transfer with currency conversions."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "The time this transfer request was created"
+          },
+          "dispatch_date": {
+            "type": "string",
+            "description": "Actual payout dispatch date. Payouts are dispatched at this date in actual processing. This date could be later than the transfer date."
+          },
+          "dispatch_info": {
+            "$ref": "#/components/schemas/DispatchInfo",
+            "description": "Additional details populated after the transaction is sent to Airwallex's downstream for processing. Only available for some transfer methods - see [Product Docs](/docs/payouts/transfers/create-a-transfer) for details."
+          },
+          "failure": {
+            "$ref": "#/components/schemas/Failure",
+            "description": "Failure details if the transfer is in an error state"
+          },
+          "fee_amount": {
+            "type": "number",
+            "description": "The transfer fee (in `source_currency`) for sending this transfer"
+          },
+          "fee_currency": {
+            "type": "string",
+            "description": "The transfer fee currency. This should always equal to the `source_currency`"
+          },
+          "fee_paid_by": {
+            "type": "string",
+            "description": "Denotes whether `PAYER` / `BENEFICIARY` will be liable for the the transfer fee.  Defaults to `PAYER` unless field is populated in the request"
+          },
+          "funding": {
+            "$ref": "#/components/schemas/Payouts_Funding",
+            "description": "The funding information of this transfer."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Returned `id` that can be used to query the status of the transfer"
+          },
+          "lock_rate_on_create": {
+            "type": "boolean",
+            "description": "Denotes whether to lock the conversion rate for a scheduled transfer with value `TRUE` or `FALSE`.This field should only be specified when a conversion is involved. If not specified, the default value is `TRUE`. "
+          },
+          "metadata": {
+            "type": "object",
+            "description": "A set of key-value pairs for storing your own data together with the transfer.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "payer": {
+            "$ref": "#/components/schemas/Payouts_Payer",
+            "description": "Details of the payer"
+          },
+          "payer_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "payer_id of the payer contact used to create this transfer"
+          },
+          "prepayment": {
+            "$ref": "#/components/schemas/Prepayment",
+            "description": "Prepayment details for a schedule transfer with currency conversions at a confirmed rate."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for the transfer instruction"
+          },
+          "reference": {
+            "type": "string",
+            "description": "Bank transfer reference to be shown on beneficiary's bank transaction history"
+          },
+          "remarks": {
+            "type": "string",
+            "description": "Additional information about this transfer, which will not be passed to the beneficiary."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "A unique request identifier specified in the transfer request"
+          },
+          "short_reference_id": {
+            "type": "string",
+            "description": "Short transfer reference for support purposes"
+          },
+          "source_amount": {
+            "type": "number",
+            "description": "Amount to be received"
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "Copied from the request if specified"
+          },
+          "status": {
+            "type": "string",
+            "description": "The transfer status. Please see details in [Transfer Statuses](/docs/payouts/transfers/create-a-transfer/transfer-statuses)."
+          },
+          "swift_charge_option": {
+            "type": "string",
+            "description": "(For SWIFT transfers only), specify who should bear SWIFT charges, either `SHARED` (default) or `PAYER`"
+          },
+          "transfer_amount": {
+            "type": "number",
+            "description": "Amount to be paid"
+          },
+          "transfer_currency": {
+            "type": "string",
+            "description": "Currency the transfer should be made in (3-letter ISO-4217 code)"
+          },
+          "transfer_date": {
+            "type": "string",
+            "description": "Date when transfer should be made (Copied from the request if specified)"
+          },
+          "transfer_method": {
+            "type": "string",
+            "description": "Copied from the request if specified.  Otherwise the system will populate this field automatically"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "The time this transfer request was last updated"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "ApplicationFeeOption": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "A positive integer specifying the amount of the fee expressed in the smallest unit of the currency. e.g. cents for USD. This field is required only when type is FIXED."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Specify the currency of the application fee in ISO 4217 currency code format, e.g., USD, AUD. This field is required when the type is FIXED.  \nWhen the type is PERCENTAGE and source_type is CONVERSION, the currency for the conversion if specified must be from the currency pair. If the currency is unspecified, the contra currency of the quote will be used."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "The metadata of the application fee. The value should be set in key:value format. (e.g., id:1).",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "percentage": {
+            "type": "string",
+            "description": "Required if the type is PERCENTAGE, and the value to be provided depends on the transaction context.  \nFX Conversions: The value acts as a markup on the FX rate, increasing the conversion cost by the specified percentage.  \nOthers: The value represents a direct fee calculated as a percentage of the transaction amount."
+          },
+          "source_type": {
+            "type": "string",
+            "description": "Specify type of the source transaction.",
+            "enum": [
+              "CONVERSION",
+              "TRANSFER"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "description": "Define the type of fee calculation. If the `source_type` is `CONVERSION`, then the type must be `PERCENTAGE`.",
+            "enum": [
+              "FIXED",
+              "PERCENTAGE"
+            ]
+          }
+        }
+      },
+      "ApplicationFee": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "The application fee amount."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of the application fee."
+          },
+          "source_type": {
+            "type": "string",
+            "description": "Specify the type of source transaction for this application fee.",
+            "enum": [
+              "CONVERSION",
+              "TRANSFER"
+            ]
+          }
+        }
+      },
+      "Payouts_Beneficiary": {
+        "type": "object",
+        "properties": {
+          "additional_info": {
+            "$ref": "#/components/schemas/BeneficiaryAdditionalInfo",
+            "description": "Additional information about the beneficiary"
+          },
+          "address": {
+            "$ref": "#/components/schemas/BeneficiaryAddress",
+            "description": "Beneficiary's address details"
+          },
+          "bank_details": {
+            "$ref": "#/components/schemas/BankDetails",
+            "description": "Beneficiary's bank account details where the payment will be credited"
+          },
+          "card": {
+            "$ref": "#/components/schemas/Payouts_Card",
+            "description": "Beneficiary's card details where the payment will be credited"
+          },
+          "company_name": {
+            "type": "string",
+            "description": "Company name of the beneficiary"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "description": "beneficiary date of birth"
+          },
+          "digital_wallet": {
+            "$ref": "#/components/schemas/DigitalWallet",
+            "description": "Beneficiary's digital wallet details where the payment will be credited"
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "Entity type of the beneficiary"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "First name of the beneficiary"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "Last name of the beneficiary"
+          },
+          "stablecoin_wallet": {
+            "$ref": "#/components/schemas/StablecoinWallet",
+            "description": "Beneficiary's stablecoin wallet details where the payment will be credited."
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of the beneficiary, indicating the type of account or method through which the beneficiary receives funds."
+          }
+        },
+        "description": "Details of the beneficiary"
+      },
+      "UnderlyingConversion": {
+        "type": "object",
+        "required": [
+          "currency_pair",
+          "rate"
+        ],
+        "properties": {
+          "currency_pair": {
+            "type": "string",
+            "description": "The currency pair of the conversion."
+          },
+          "rate": {
+            "type": "number",
+            "description": "The rate of the conversion."
+          }
+        },
+        "description": "Conversion details of a transfer with currency conversions."
+      },
+      "DispatchInfo": {
+        "type": "object",
+        "properties": {
+          "external_reference": {
+            "type": "string",
+            "description": "A reference ID to track a transfer after it's dispatched from Airwallex. For stablecoin transfers, this is the on-chain transaction hash."
+          },
+          "external_reference_type": {
+            "type": "string",
+            "description": "The definition of the `external_reference` in the payment system. Possible values include `NETWORK_TRANSACTION_ID` for stablecoin transfers (blockchain transaction hash)."
+          }
+        },
+        "description": "Additional details populated after the transaction is sent to Airwallex's downstream for processing. Only available for some transfer methods - see [Product Docs](/docs/payouts/transfers/create-a-transfer) for details."
+      },
+      "Failure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Failure code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Failure message"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional failure details",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Failure type"
+              },
+              "reason_codes": {
+                "type": "array",
+                "description": "Detailed reason code",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Failure details if the transfer is in an error state"
+      },
+      "Payouts_Funding": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "deposit_type": {
+            "type": "string",
+            "description": "Can be one of: `FASTER_DIRECT_DEBIT`, `DIRECT_DEBIT`."
+          },
+          "failure_details": {
+            "$ref": "#/components/schemas/Payouts_FailureDetails",
+            "description": "Details about why the funding has failed. Only present when the funding is in a failure state."
+          },
+          "failure_reason": {
+            "type": "string",
+            "description": "Empty unless the funding is in an error state."
+          },
+          "funding_source_id": {
+            "type": "string",
+            "description": "The id of the funding source, it can be null if using a wallet."
+          },
+          "status": {
+            "type": "string",
+            "description": "The funding status of this payment. Please see details in [Funding Statuses](/docs/payouts/transfers/create-a-transfer/transfer-statuses#funding-statuses)."
+          }
+        },
+        "description": "The funding information of this transfer."
+      },
+      "Payouts_Payer": {
+        "type": "object",
+        "required": [
+          "address",
+          "entity_type"
+        ],
+        "properties": {
+          "additional_info": {
+            "$ref": "#/components/schemas/PayerAdditionalInfo",
+            "description": "Additional information about the payer"
+          },
+          "address": {
+            "$ref": "#/components/schemas/PayerAddress",
+            "description": "Payer's address details"
+          },
+          "company_name": {
+            "type": "string",
+            "description": "Company name of the payer"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "description": "Payer's date of birth"
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "Entity type of the payer"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "First name of the payer"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "Last name of the payer"
+          }
+        },
+        "description": "Details for the payer in the transfer request. If payer_id provided in the transfer request then payer should be empty"
+      },
+      "Prepayment": {
+        "type": "object",
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "The prepayment amount to be paid."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The prepayment currency."
+          }
+        },
+        "description": "Prepayment details for a schedule transfer with currency conversions at a confirmed rate."
+      },
+      "BeneficiaryAdditionalInfo": {
+        "type": "object",
+        "properties": {
+          "business_area": {
+            "type": "string",
+            "description": "Category of business activity"
+          },
+          "business_phone_number": {
+            "type": "string",
+            "description": "Business phone number"
+          },
+          "business_registration_number": {
+            "type": "string",
+            "description": "Business registration number"
+          },
+          "external_identifier": {
+            "type": "string",
+            "description": "The identifier that you use to identify a beneficiary, usually a unique identifier. This field can be used to link transfers or beneficiaries to other records such as tax form details for filing purposes"
+          },
+          "legal_rep_bank_account_number": {
+            "type": "string",
+            "description": "Legal representative's personal bank account number used for declaration purposes. No funds will be sent to this account number."
+          },
+          "legal_rep_first_name_in_chinese": {
+            "type": "string",
+            "description": "Legal representative first name in chinese"
+          },
+          "legal_rep_id_number": {
+            "type": "string",
+            "description": "Legal representative id number"
+          },
+          "legal_rep_last_name_in_chinese": {
+            "type": "string",
+            "description": "Legal representative last name in chinese"
+          },
+          "legal_rep_mobile_number": {
+            "type": "string",
+            "description": "Legal representative’s mobile number associated with their bank account."
+          },
+          "personal_email": {
+            "type": "string",
+            "description": "Personal email"
+          },
+          "personal_first_name_in_chinese": {
+            "type": "string",
+            "description": "Beneficiary's first name in Chinese"
+          },
+          "personal_id_number": {
+            "type": "string",
+            "description": "Personal unique identifier number"
+          },
+          "personal_id_type": {
+            "type": "string",
+            "description": "Personal unique identifier type"
+          },
+          "personal_last_name_in_chinese": {
+            "type": "string",
+            "description": "Beneficiary's last name in Chinese"
+          },
+          "personal_mobile_number": {
+            "type": "string",
+            "description": "Personal mobile number"
+          },
+          "recipient_account_id": {
+            "type": "string",
+            "description": "Account unique identifier of the recipient account used for payout processing. The account must be active and have `customer_agreements.terms_and_conditions.service_agreement_type` set to `RECIPIENT` (verify via [Retrieve account details API](/docs/api/scale/accounts/detail))."
+          },
+          "security_question": {
+            "type": "string",
+            "description": "Security question. Required when the email address is not registered with Interac e-Transfer autodeposit."
+          },
+          "security_question_answer": {
+            "type": "string",
+            "description": "Security question answer. Required when the email address is not registered with Interac e-Transfer autodeposit."
+          }
+        },
+        "description": "Additional information about the beneficiary"
+      },
+      "BeneficiaryAddress": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Beneficiary's city"
+          },
+          "country_code": {
+            "type": "string",
+            "description": "Beneficiary's country code (2-letter ISO 3166-2 country code)"
+          },
+          "postcode": {
+            "type": "string",
+            "description": "Beneficiary's post code"
+          },
+          "state": {
+            "type": "string",
+            "description": "Beneficiary's state"
+          },
+          "street_address": {
+            "type": "string",
+            "description": "Beneficiary's street address"
+          }
+        },
+        "description": "Beneficiary's address details"
+      },
+      "BankDetails": {
+        "type": "object",
+        "required": [
+          "account_currency",
+          "account_name",
+          "bank_country_code"
+        ],
+        "properties": {
+          "account_currency": {
+            "type": "string",
+            "description": "Account Currency"
+          },
+          "account_name": {
+            "type": "string",
+            "description": "Account holder name of the beneficiary’s bank account"
+          },
+          "account_name_alias": {
+            "type": "string",
+            "description": "The beneficiary’s account name known in the payment system. This is only supported in some regions and transfer methods. See detailed definitions in the [Payouts Product Docs](/docs/payouts/beneficiaries/create-beneficiaries)."
+          },
+          "account_number": {
+            "type": "string",
+            "description": "Account number, mostly for non-european countries, either account_number or iban should be filled"
+          },
+          "account_routing_type1": {
+            "type": "string",
+            "description": "Routing code type"
+          },
+          "account_routing_type2": {
+            "type": "string",
+            "description": "Routing code sub type"
+          },
+          "account_routing_value1": {
+            "type": "string",
+            "description": "Routing code value"
+          },
+          "account_routing_value2": {
+            "type": "string",
+            "description": "Routing code sub type value"
+          },
+          "bank_account_category": {
+            "type": "string",
+            "description": "bank account type"
+          },
+          "bank_branch": {
+            "type": "string",
+            "description": "Specific branch of bank account"
+          },
+          "bank_country_code": {
+            "type": "string",
+            "description": "Bank country code (2-letter ISO 3166-2 country code)"
+          },
+          "bank_name": {
+            "type": "string",
+            "description": "Bank name of the beneficiary's bank account"
+          },
+          "bank_state": {
+            "type": "string",
+            "description": "Bank State"
+          },
+          "bank_street_address": {
+            "type": "string",
+            "description": "Bank street address"
+          },
+          "binding_mobile_number": {
+            "type": "string",
+            "description": "The mobile number tied to the Beneficiary's bank account"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "Fingerprint of current beneficiary's bank account"
+          },
+          "iban": {
+            "type": "string",
+            "description": "International bank account number, mostly for european countries"
+          },
+          "intermediary_bank_name": {
+            "type": "string",
+            "description": "Bank name of the beneficiary's intermediary bank"
+          },
+          "intermediary_bank_swift_code": {
+            "type": "string",
+            "description": "Intermediary bank SWIFT code / BIC,Should contain alphanumeric characters only, Should be a valid and supported SWIFT code / BIC"
+          },
+          "local_clearing_system": {
+            "type": "string",
+            "description": "Which clearing system should be used for this local bank transfer.\n\nPlease refer to our [payout guide](https://airwallex.com/guides/payout) for details about each option.\n\nWe suggest explicitly specifying this value, however if it's not provided we will select a default (using the specified account routing type and/or what's most often the best option)."
+          },
+          "swift_code": {
+            "type": "string",
+            "description": "Bank swift code"
+          }
+        },
+        "description": "Beneficiary's bank account details where the payment will be credited"
+      },
+      "Payouts_Card": {
+        "type": "object",
+        "required": [
+          "cardholder_name",
+          "token"
+        ],
+        "properties": {
+          "brand": {
+            "type": "string",
+            "description": "Card brand",
+            "readOnly": true
+          },
+          "cardholder_name": {
+            "type": "string",
+            "description": "Cardholder name"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Card currency",
+            "readOnly": true
+          },
+          "expiry_month": {
+            "type": "string",
+            "description": "Expiry month"
+          },
+          "expiry_year": {
+            "type": "string",
+            "description": "Expiry year"
+          },
+          "number": {
+            "type": "string",
+            "description": "Card number",
+            "readOnly": true
+          },
+          "token": {
+            "type": "string",
+            "description": "Tokenised card number, which can be retrieved from Airwallex beneficiary component"
+          }
+        },
+        "description": "Beneficiary's card details where the payment will be credited"
+      },
+      "DigitalWallet": {
+        "type": "object",
+        "required": [
+          "account_name",
+          "id_type",
+          "id_value",
+          "provider"
+        ],
+        "properties": {
+          "account_name": {
+            "type": "string",
+            "description": "Account holder name of the beneficiary’s digital wallet"
+          },
+          "country_code": {
+            "type": "string",
+            "description": "Digital wallet country code (2-letter ISO 3166-2 country code)"
+          },
+          "id_type": {
+            "type": "string",
+            "description": "Account identifier type of the beneficiary’s digital wallet"
+          },
+          "id_value": {
+            "type": "string",
+            "description": "Account identifier value of the beneficiary’s digital wallet"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Service provider of the beneficiary's digital wallet"
+          }
+        },
+        "description": "Beneficiary's digital wallet details where the payment will be credited"
+      },
+      "StablecoinWallet": {
+        "type": "object",
+        "required": [
+          "address",
+          "asset",
+          "network"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Blockchain wallet address of the beneficiary."
+          },
+          "asset": {
+            "type": "string",
+            "description": "Stablecoin asset type, e.g., `USDC`."
+          },
+          "network": {
+            "type": "string",
+            "description": "Blockchain network, e.g., `ETHEREUM`."
+          }
+        },
+        "description": "Beneficiary's stablecoin wallet details where the payment will be credited."
+      },
+      "Payouts_FailureDetails": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Error code (details can be found [here](/docs/global-treasury/receive-funds/add-funds-via-direct-debits-from-linked-accounts/direct-debit-deposit-error-codes))."
+          },
+          "iso_code": {
+            "type": "string",
+            "description": "Error code [ISO 20022](https://www.iso20022.org/about-iso-20022) (details can be found [here](/docs/global-treasury/receive-funds/add-funds-via-direct-debits-from-linked-accounts/direct-debit-deposit-error-codes))."
+          },
+          "provider_failure_details": {
+            "$ref": "#/components/schemas/ProviderFailureDetails",
+            "description": "A set of original information received from the local clearing system."
+          }
+        },
+        "description": "Details about why the funding has failed. Only present when the funding is in a failure state."
+      },
+      "PayerAdditionalInfo": {
+        "type": "object",
+        "properties": {
+          "business_registration_number": {
+            "type": "string",
+            "description": "Business registration number"
+          },
+          "business_registration_type": {
+            "type": "string",
+            "description": "Type of business as registered with the local government authority"
+          },
+          "external_id": {
+            "type": "string",
+            "description": "Unique identifier of the person in your company"
+          },
+          "personal_email": {
+            "type": "string",
+            "description": "Personal email"
+          },
+          "personal_id_number": {
+            "type": "string",
+            "description": "Personal unique identifier number"
+          }
+        },
+        "description": "Additional information about the payer"
+      },
+      "PayerAddress": {
+        "type": "object",
+        "required": [
+          "country_code"
+        ],
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Payer's city"
+          },
+          "country_code": {
+            "type": "string",
+            "description": "Payer's country code (2-letter ISO 3166-2 country code)"
+          },
+          "postcode": {
+            "type": "string",
+            "description": "Payer's post code"
+          },
+          "state": {
+            "type": "string",
+            "description": "Payer's state"
+          },
+          "street_address": {
+            "type": "string",
+            "description": "Payer's street address"
+          }
+        },
+        "description": "Payer's address details"
+      },
+      "ProviderFailureDetails": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The original error code received from the local clearing system."
+          },
+          "local_clearing_system": {
+            "type": "string",
+            "description": "The local clearing system used for the direct debit deposit. Possible values are `AU_BECS`, `US_ACH`, `GB_BACS`, `EU_SEPA`."
+          },
+          "message": {
+            "type": "string",
+            "description": "The original error message received from the local clearing system."
+          }
+        },
+        "description": "A set of original information received from the local clearing system."
+      }
+    }
+  },
+  "x-hackgenesis-source": {
+    "repository": "https://github.com/airwallex/airwallex-openapi",
+    "commit": "a8a09eb98ccf65e4a44481f768ac58cbd6540fa5",
+    "path": "openapi/client-api/latest/airwallex-openapi-latest.json",
+    "source_sha256": "ee3add01d9e521467b023711f965dc5dba78ee9246f566295725e62fd13629a2",
+    "included_paths": [
+      "/api/v1/transfers/create",
+      "/api/v1/transfers/{id}",
+      "/api/v1/transfers/{id}/cancel"
+    ],
+    "transformation": "Only unrelated paths and unreachable components were removed; retained OpenAPI nodes were not semantically edited."
+  }
+}

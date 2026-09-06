@@ -100,16 +100,25 @@ module IntegrationGenerator
           next unless operation
 
           if intent == "webhook"
-            Support.request_schema_entries(operation).each do |path, schema, _media_type|
+            entries = Support.request_schema_entries(operation)
+            preferred_entries(entries).each do |path, schema, _media_type|
               add_field(fields, intent, Support.operation_key(operation), "request", path, schema)
             end
           else
-            Support.response_schema_entries(operation).each do |path, schema, status, _media_type|
+            entries = Support.response_schema_entries(operation)
+            preferred_entries(entries).each do |path, schema, status, _media_type|
               add_field(fields, intent, Support.operation_key(operation), "response:#{status}", path, schema)
             end
           end
         end
         fields.uniq { |field| [field["operation_key"], field["direction"], field["path"], field["values"]] }
+      end
+
+      def preferred_entries(entries)
+        entries.each_with_index.sort_by do |(entry, index)|
+          path = entry.first.to_s
+          [path.include?("[]") ? 1 : 0, path.count("."), path, index]
+        end.map(&:first)
       end
 
       def add_field(fields, intent, operation_key, direction, path, schema)

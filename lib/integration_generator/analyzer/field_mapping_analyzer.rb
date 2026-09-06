@@ -4,7 +4,7 @@ module IntegrationGenerator
   module Analyzer
     class FieldMappingAnalyzer
       ROLE_RULES = {
-        %w[amount value sum money] => ["amount", "operation.amount", 0.95],
+        %w[amount value sum money transfer_amount source_amount] => ["amount", "operation.amount", 0.95],
         %w[external_id merchant_reference client_reference] => ["external_id", "operation.id", 0.85],
         %w[recipient destination beneficiary payee] => ["recipient", "operation.payout_requisite", 0.65],
         %w[phone phone_number] => ["recipient_phone", "operation.payout_requisite.sbp.phone", 0.65],
@@ -13,7 +13,7 @@ module IntegrationGenerator
         %w[card_number pan] => ["recipient_card", "operation.payout_requisite.card_number", 0.6]
       }.freeze
       ID_PARAMETER_NAMES = %w[
-        id payout_id transfer_id transaction_id operation_id withdrawal_id disbursement_id remittance_id
+        id code reference payout_id transfer_id transaction_id operation_id withdrawal_id disbursement_id remittance_id
       ].freeze
       IDEMPOTENCY_PARAMETER_NAMES = %w[idempotency_key idempotency_token].freeze
 
@@ -138,6 +138,8 @@ module IntegrationGenerator
       def request_mappings(schema, warnings)
         required = required_paths(schema)
         mappings = Support.schema_entries(schema, direction: :request).filter_map do |path, child|
+          next if path.include?("[]")
+
           rule = role_rule(path)
           next unless rule
 
@@ -155,11 +157,35 @@ module IntegrationGenerator
             "evidence" => "provider field name matches '#{path.split('.').last}'"
           }
         end
+        mappings.reject! do |mapping|
+          next false unless mapping.dig("schema", "kind") == "object"
+
+          prefix = "#{mapping['target']}."
+          mappings.any? do |candidate|
+            candidate != mapping && candidate["role"] == mapping["role"] &&
+              candidate["target"].start_with?(prefix)
+          end
+        end
+        amount_mappings = mappings.select { |mapping| mapping["role"] == "amount" }
+        if amount_mappings.length > 1
+          amount_mappings.each do |mapping|
+            mapping["confidence"] = [mapping["confidence"], 0.75].min
+            mapping["requires_review"] = true
+            mapping["evidence"] = "multiple amount-like provider fields require explicit review"
+          end
+          warnings << Support.warning(
+            "AMBIGUOUS_AMOUNT_MAPPING",
+            "Multiple amount-like request fields were found; select their host sources explicitly",
+            location: "#/field_mappings/create_payout/request"
+          )
+        end
 
         required.each do |path|
           child = schema_at_path(schema, path)
           next if child&.fetch("read_only", false)
-          next if mappings.any? { |mapping| mapping["target"] == path }
+          next if mappings.any? do |mapping|
+            mapping["target"] == path || mapping["target"].start_with?("#{path}.")
+          end
 
           warnings << Support.warning(
             "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND",
@@ -241,11 +267,13 @@ module IntegrationGenerator
           next [] unless Support.success_response_status?(status)
 
           _media_type, media = Support.json_content(response["content"])
-          Support.schema_entries(media&.fetch("schema", nil), direction: :response).filter_map do |path, child|
+          candidates = Support.schema_entries(media&.fetch("schema", nil), direction: :response).filter_map do |path, child|
             rule = response_role(path)
             next unless rule
 
             role, confidence = rule
+            next if role == "status" && child["kind"] != "string"
+
             {
               "role" => role,
               "source" => path,
@@ -255,11 +283,30 @@ module IntegrationGenerator
               "provenance" => "inferred"
             }
           end
+          candidates.group_by { |mapping| mapping["role"] }.values.map do |role_candidates|
+            role_candidates.min_by { |mapping| response_mapping_rank(mapping) }
+          end
         end
       end
 
+      def response_mapping_rank(mapping)
+        path = mapping.fetch("source")
+        schema = mapping.fetch("schema", {})
+        enum_penalty = mapping["role"] == "status" && schema.fetch("enum", []).empty? ? 1 : 0
+        [enum_penalty, path.include?("[]") ? 1 : 0, path.count("."), path]
+      end
+
       def amount_transformation(operation, mappings, warnings)
-        amount = mappings.find { |mapping| mapping["role"] == "amount" }
+        amounts = mappings.select { |mapping| mapping["role"] == "amount" }
+        if amounts.length > 1
+          return unknown_amount(
+            warnings,
+            "Multiple amount-like request fields require explicit review",
+            amounts.first["target"]
+          )
+        end
+
+        amount = amounts.first
         return unknown_amount(warnings, "No amount-like request field was found") unless amount
 
         text = [operation["description"], amount.dig("schema", "description")].compact.join(" ")
@@ -341,13 +388,24 @@ module IntegrationGenerator
         end
       end
 
-      def required_paths(schema, prefix = nil)
+      def required_paths(schema, prefix = nil, required_chain: true)
         return [] unless schema.is_a?(Hash)
 
-        paths = schema.fetch("required", []).map { |name| [prefix, name].compact.join(".") }
+        required_names = schema.fetch("required", [])
+        paths = if required_chain
+                  required_names.map { |name| [prefix, name].compact.join(".") }
+                else
+                  []
+                end
         schema.fetch("properties", {}).each do |name, child|
           child_prefix = [prefix, name].compact.join(".")
-          paths.concat(required_paths(child, child_prefix))
+          paths.concat(
+            required_paths(
+              child,
+              child_prefix,
+              required_chain: required_chain && required_names.include?(name)
+            )
+          )
         end
         paths
       end

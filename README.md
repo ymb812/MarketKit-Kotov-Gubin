@@ -23,6 +23,8 @@ Runtime не использует LLM или внешние API. Полный pi
 |---|---|
 | Быстро запустить проект и получить результат | раздел «Установка и первый полный запуск» ниже |
 | Проверить каждый критерий по коду и тестам | [JURY_GUIDE.md](JURY_GUIDE.md) |
+| Проверить Adyen и Airwallex из официальных OpenAPI | [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md) |
+| Увидеть покрытие 25 баллов generated service | [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md) |
 | Разобраться в слоях, связях и точках расширения | [MODULE_MAP.md](MODULE_MAP.md) |
 | Взять готовый связный текст третьего чекпоинта | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
 | Провести live demo через локальный UI | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
@@ -67,6 +69,14 @@ output/demo-<id>/novapay/
 
 Canonical bundle после override сохраняет `NEEDS REVIEW` из-за callback secret: это ручная ENV-настройка, которой нет в OpenAPI, а не скрытая ошибка генерации. Ожидаемые 5/2/5 capabilities и порядок чтения файлов описаны в [JURY_GUIDE.md](JURY_GUIDE.md).
 
+Отдельная проверка на двух официальных публичных OpenAPI:
+
+```powershell
+bundle exec ruby bin/real_provider_demo
+```
+
+Она генерирует и исполняет через recording client сервисы для **Adyen Transfers API v4** и **Airwallex Payouts / Transfers API**. Source repository, commit, upstream SHA-256, сфокусированные snapshots, review overrides, точные assertions и граница между offline contract test и live sandbox описаны в [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md).
+
 ## Отдельные команды CLI
 
 ```bash
@@ -106,7 +116,7 @@ UI работает поверх того же Ruby pipeline; JavaScript тол�
 
 Свой файл: в «Обзоре» справа от «Входная спецификация» нажмите «Загрузить свою OpenAPI ↑». Можно также загрузить YAML/JSON в панели OpenAPI раздела «Спецификация» или вставить текст в редактор. Изменение входа сбрасывает старый результат; генерация доступна только после нового успешного анализа. Лимит загружаемого файла — 1 МБ, всего JSON-запроса — 2 МБ. Не помещайте реальные credentials в demo-spec: секреты нужны в ENV host-приложения, а не генератору.
 
-Загрузка файлов и реальные скачивания проверены во встроенном браузере Codex. Ссылки на скачивание действуют до перезапуска сервера; затем сгенерируйте пакет заново. Файлы в `output/web-<id>/` сохраняются. Перед записью экранного видео для третьего чекпоинта нужно один раз пройти сценарий в фактическом браузере записи. CLI-демо ниже остаётся резервным сценарием.
+Загрузка файлов и реальные скачивания проверены во встроенном браузере Codex. Ссылки на скачивание действуют до перезапуска сервера; затем сгенерируйте пакет заново. Файлы в `output/web-<id>/` сохраняются. Экранное видео третьего чекпоинта уже записано и показано; CLI-демо ниже остаётся воспроизводимым сценарием для проверки кода.
 
 ## Демо для оценки — одна команда
 
@@ -343,14 +353,18 @@ bundle exec rake test
 node --test test/web/frontend_test.js
 ```
 
-Тесты покрывают parser, deterministic semantic rules, ambiguity guards, status/error/webhook/field extraction, manifest validation, все четыре generators, runtime request/response/callback contract, no-overwrite CLI и три demo specs. Перед публикацией writer отдельно запускает `ruby -c` для generated service.
+Тесты покрывают parser, deterministic semantic rules, ambiguity guards, status/error/webhook/field extraction, manifest validation, все четыре generators, runtime request/response/callback contract, no-overwrite CLI, три synthetic demo specs и два официальных real-provider snapshots. Перед публикацией writer отдельно запускает `ruby -c` для generated service. Точная матрица по 10+8+7 баллам generated service находится в [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md).
 
 ## Demo specs
 
 - `examples/provider_api.yaml` — каноническая NovaPay OpenAPI 3.0.3 из материалов хакатона. Исходный файл: `provider_api (1).yaml`, SHA-256 `415F50EE36FB331DFAB49CEED0E8ED3B0EBE16053D7E00DBABD32282F4396551`.
 - `examples/alt_transfer_provider.json` — самостоятельная OpenAPI 3.1 fixture с другими endpoint/field names, Bearer auth, server variables и `application/problem+json`.
 - `examples/alt_withdrawal_provider.yaml` — самостоятельная OpenAPI 3.0.3 fixture с withdrawal terminology, Basic auth, nested response/webhook payloads, endpoint без `operationId` и conditional beneficiary fields. `examples/alt_withdrawal_overrides.json` демонстрирует тот же generic override contract в JSON.
+- `examples/real/adyen_transfer_v4.yaml` — сфокусированный snapshot официальной Adyen Transfers API v4 на закреплённом commit.
+- `examples/real/airwallex_transfer.json` — сфокусированный snapshot официальной Airwallex Payouts / Transfers API на закреплённом commit.
+
+Real-provider snapshots воспроизводятся командой `bundle exec ruby bin/refresh_real_examples`: загрузчик проверяет SHA-256 полного upstream-файла и сохраняет выбранные payout paths с транзитивно достижимыми local `$ref`. Обычный demo работает offline и не требует provider credentials.
 
 ## Статус
 
-Матрица, ревью, документация, contract/remediation-итерация и итоговое readiness-review завершены с вердиктом **GO**. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 134 tests / 792 assertions; frontend logic — 7/7; три demo bundles, manifest-only byte match, браузерные `oneOf`/broken-ref переходы, generation/download и Windows HTTP flow из Unicode-пути проверены. До третьего чекпоинта остались ручные запись/экспорт экранного видео, проверка звука и один синхронный прогон текста; slide deck не нужен. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.
+Третий чекпоинт пройден. Актуальная Ruby suite — **149 tests / 887 assertions**, без failures/errors/skips; frontend logic — 7/7. Помимо трёх synthetic demo specs, два официальных real-provider snapshots проходят generation, `ruby -c` и runtime contract tests. Основные документы для проверки кода: [JURY_GUIDE.md](JURY_GUIDE.md), [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md), [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md) и [MODULE_MAP.md](MODULE_MAP.md). Live sandbox calls без credentials не заявляются. Generated RSpec artifact, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.

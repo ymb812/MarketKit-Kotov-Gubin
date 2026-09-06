@@ -278,15 +278,14 @@ module IntegrationGenerator
               }
 
               body = {}
-              mappings_for(intent).sort_by { |mapping| mapping["target"].to_s.count(".") }.each do |mapping|
+              mappings = mappings_for(intent)
+              mappings.sort_by { |mapping| mapping["target"].to_s.count(".") }.each do |mapping|
                 if mapping["target"].to_s.include?("[]")
+                  next if covered_by_reviewed_array_mapping?(mapping, mappings)
+
                   raise ConfigurationError, "Array element mappings require a reviewed whole-array source"
                 end
                 location = mapping["location"] || "body"
-                if mapping["requires_review"] && !allow_unreviewed
-                  raise ConfigurationError,
-                        "Mapping #{mapping['target']} requires manifest review; use an override before production"
-                end
                 next if location == "path"
 
                 source = mapping["source_candidate"]
@@ -296,16 +295,19 @@ module IntegrationGenerator
                   end
                   next
                 end
-
                 value = mapping_value(operation, request_method, mapping)
+                explicit_nullable = value.nil? && nullable_body_value?(operation, mapping, value)
                 if value.nil?
-                  if mapping["required"] && !nullable_body_value?(operation, mapping, value)
+                  if mapping["required"] && !explicit_nullable
                     raise ArgumentError, "Required provider field #{mapping['target']} is missing"
                   end
-                  next unless nullable_body_value?(operation, mapping, value)
-                else
-                  value = transform_value(mapping, value)
+                  next unless explicit_nullable
                 end
+                if mapping["requires_review"] && !allow_unreviewed
+                  raise ConfigurationError,
+                        "Mapping #{mapping['target']} requires manifest review; use an override before production"
+                end
+                value = transform_value(mapping, value) unless value.nil?
                 value = project_to_provider_schema(value, mapping["schema"]) if location == "body"
 
                 case location
@@ -321,6 +323,19 @@ module IntegrationGenerator
               request[:body] = body unless body.empty?
               apply_auth(request, definition.fetch("key"))
               request
+            end
+
+            def covered_by_reviewed_array_mapping?(mapping, mappings)
+              target = mapping["target"].to_s
+              array_index = target.index("[]")
+              return false unless array_index
+
+              parent = target[0...array_index]
+              mappings.any? do |candidate|
+                candidate["target"] == parent && candidate["location"] == "body" &&
+                  candidate.dig("schema", "kind") == "array" && !candidate["requires_review"] &&
+                  (present?(candidate["source_candidate"]) || candidate.key?("constant_value"))
+              end
             end
 
             def interpolate_path(path, intent, operation)

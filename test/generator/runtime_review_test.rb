@@ -146,6 +146,63 @@ class RuntimeReviewTest < Minitest::Test
     refute sample.fetch("recipient").key?("server_token")
   end
 
+  def test_optional_unmapped_parameter_is_omitted_without_blocking_request
+    @raw["paths"]["/payouts"]["post"]["parameters"] << {
+      "name" => "Optional-Trace", "in" => "header", "required" => false,
+      "schema" => { "type" => "string" }
+    }
+
+    service, = generated_service
+    request = service.build_provider_request(operation)
+
+    refute request[:headers].key?("Optional-Trace")
+  end
+
+  def test_optional_review_mapping_only_blocks_when_host_supplies_a_value
+    schema = @raw.dig("components", "schemas", "CreatePayoutRequest")
+    schema["properties"]["bank_name"] = {
+      "type" => "string", "nullable" => true, "description" => "Optional recipient bank"
+    }
+
+    service, = generated_service
+    request = service.build_provider_request(operation)
+
+    refute request[:body].key?("bank_name")
+    with_bank_name = operation
+    with_bank_name["payout_requisite"]["sbp"]["bank_name"] = "Example Bank"
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) do
+      service.build_provider_request(with_bank_name)
+    end
+    with_bank_name["payout_requisite"]["sbp"]["bank_name"] = nil
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) do
+      service.build_provider_request(with_bank_name)
+    end
+  end
+
+  def test_reviewed_whole_array_mapping_supersedes_inferred_element_mappings
+    schema = @raw.dig("components", "schemas", "CreatePayoutRequest")
+    schema["properties"]["transactions"] = {
+      "type" => "array",
+      "items" => {
+        "type" => "object",
+        "properties" => {
+          "amount" => { "type" => "integer" },
+          "recipient" => { "type" => "string" }
+        }
+      }
+    }
+    @overrides.dig("field_mappings", "create_payout", "request") << {
+      "target" => "transactions", "location" => "body",
+      "source" => "operation.transactions", "confirm" => true
+    }
+    input = operation.merge("transactions" => [{ "amount" => 500, "recipient" => "recipient_1" }])
+
+    service, = generated_service
+    request = service.build_provider_request(input)
+
+    assert_equal [{ "amount" => 500, "recipient" => "recipient_1" }], request.dig(:body, "transactions")
+  end
+
   def test_scoped_status_path_requires_explicit_merchant_source
     old_path = @raw["paths"].fetch("/payouts/{payout_id}")
     status_operation = old_path.delete("get")

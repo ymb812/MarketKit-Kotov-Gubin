@@ -1,0 +1,148 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "fileutils"
+require "json"
+require "net/http"
+require "uri"
+require "yaml"
+
+project_root = File.expand_path("..", __dir__)
+target_root = File.join(project_root, "examples", "real")
+
+SOURCES = [
+  {
+    name: "adyen_transfer_v4",
+    repository: "https://github.com/Adyen/adyen-openapi",
+    commit: "f82d1fe674e536cc2c6b0d7946e0e827873a4fbf",
+    path: "yaml/TransferService-v4.yaml",
+    sha256: "4d9803371cda6c5be7ca456e201cb287e7851830ba1d96506224d0542cec59a5",
+    paths: ["/transfers", "/transfers/{id}"],
+    target: "adyen_transfer_v4.yaml"
+  },
+  {
+    name: "airwallex_transfer",
+    repository: "https://github.com/airwallex/airwallex-openapi",
+    commit: "a8a09eb98ccf65e4a44481f768ac58cbd6540fa5",
+    path: "openapi/client-api/latest/airwallex-openapi-latest.json",
+    sha256: "ee3add01d9e521467b023711f965dc5dba78ee9246f566295725e62fd13629a2",
+    paths: [
+      "/api/v1/transfers/create",
+      "/api/v1/transfers/{id}",
+      "/api/v1/transfers/{id}/cancel"
+    ],
+    target: "airwallex_transfer.json"
+  }
+].freeze
+
+def raw_url(source)
+  repository_path = URI(source.fetch(:repository)).path.delete_prefix("/")
+  "https://raw.githubusercontent.com/#{repository_path}/#{source.fetch(:commit)}/#{source.fetch(:path)}"
+end
+
+def download(source)
+  uri = URI(raw_url(source))
+  response = Net::HTTP.get_response(uri)
+  raise "Download failed for #{uri}: HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+  body = response.body
+  actual = Digest::SHA256.hexdigest(body)
+  unless actual == source.fetch(:sha256)
+    raise "SHA-256 mismatch for #{uri}: expected #{source.fetch(:sha256)}, got #{actual}"
+  end
+
+  body
+end
+
+def parse_document(source, body)
+  File.extname(source.fetch(:path)) == ".json" ? JSON.parse(body) : YAML.safe_load(body, aliases: true)
+end
+
+def deep_copy(value)
+  Marshal.load(Marshal.dump(value))
+end
+
+def collect_local_refs(value, refs)
+  case value
+  when Hash
+    ref = value["$ref"]
+    refs << ref if ref&.start_with?("#/")
+    value.each_value { |child| collect_local_refs(child, refs) }
+  when Array
+    value.each { |child| collect_local_refs(child, refs) }
+  end
+end
+
+def pointer_parts(ref)
+  ref.delete_prefix("#/").split("/").map { |part| part.gsub("~1", "/").gsub("~0", "~") }
+end
+
+def pointer_value(document, parts)
+  parts.reduce(document) { |value, part| value.fetch(part) }
+end
+
+def assign_pointer(document, parts, value)
+  leaf = parts.last
+  parent = parts[0...-1].reduce(document) { |node, part| node[part] ||= {} }
+  parent[leaf] = value
+end
+
+def referenced_security_names(document)
+  requirements = [document["security"]]
+  document.fetch("paths").each_value do |path_item|
+    path_item.each do |method, operation|
+      requirements << operation["security"] if %w[get put post delete options head patch trace].include?(method)
+    end
+  end
+  requirements.compact.flat_map do |items|
+    items.is_a?(Array) ? items.flat_map { |item| item.is_a?(Hash) ? item.keys : [] } : []
+  end.uniq
+end
+
+def focused_document(source, body)
+  original = parse_document(source, body)
+  document = original.reject { |key, _value| %w[paths components].include?(key) }
+  document["paths"] = source.fetch(:paths).to_h do |path|
+    [path, deep_copy(original.fetch("paths").fetch(path))]
+  end
+  document["components"] = {}
+
+  referenced_security_names(document).each do |name|
+    scheme = original.dig("components", "securitySchemes", name)
+    assign_pointer(document, ["components", "securitySchemes", name], deep_copy(scheme)) if scheme
+  end
+
+  refs = []
+  collect_local_refs(document, refs)
+  seen = {}
+  until refs.empty?
+    ref = refs.shift
+    next if seen[ref]
+
+    seen[ref] = true
+    parts = pointer_parts(ref)
+    value = deep_copy(pointer_value(original, parts))
+    assign_pointer(document, parts, value)
+    collect_local_refs(value, refs)
+  end
+
+  document["x-hackgenesis-source"] = {
+    "repository" => source.fetch(:repository),
+    "commit" => source.fetch(:commit),
+    "path" => source.fetch(:path),
+    "source_sha256" => source.fetch(:sha256),
+    "included_paths" => source.fetch(:paths),
+    "transformation" => "Only unrelated paths and unreachable components were removed; retained OpenAPI nodes were not semantically edited."
+  }
+  document
+end
+
+FileUtils.mkdir_p(target_root)
+SOURCES.each do |source|
+  document = focused_document(source, download(source))
+  target = File.join(target_root, source.fetch(:target))
+  rendered = File.extname(target) == ".json" ? JSON.pretty_generate(document) : YAML.dump(document)
+  File.write(target, rendered, mode: "w:utf-8")
+  puts "#{target}: #{Digest::SHA256.file(target).hexdigest}"
+end

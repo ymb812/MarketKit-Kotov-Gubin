@@ -147,7 +147,10 @@ Generator получает только final manifest и регистрируе
 | Loader/parser/schema/IR | соответствующий `test/openapi/*_test.rb` | если меняется serialized IR — analyzer и canonical pipeline |
 | Analyzer/manifest/override | профильный analyzer test + manifest/override tests | если меняются executable mappings — generated runtime на canonical и alternative spec |
 | Service generator/runtime | generated contract + runtime review + alternative withdrawal contract | всегда `ruby -c` полного bundle |
+| Реальные provider schemas | `test/real_providers/real_provider_examples_test.rb` | при изменении refresh/snapshot/override — `bin/real_provider_demo` для обоих провайдеров |
 | Docs/fixtures/report | artifact bundle + compatibility tests, ручное чтение fresh artifacts | если изменён manifest contract — все generators |
 | Output writer/CLI/web | профильные negative tests | для пользовательского flow — `bin/demo`; для UI — настоящий local HTTP/download smoke |
 
 Полный порядок после существенного изменения остаётся таким: unit tests → canonical integration/golden → alternative specs → полный набор артефактов → `ruby -c` → generated RSpec, если он появится. Текущий проект генерирует fixtures, но не генерирует отдельный RSpec-файл.
+
+Отдельная карта реальных Adyen/Airwallex входов находится в [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md), а crosswalk generated runtime по критерию 2 — в [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md).

@@ -1,0 +1,41 @@
+override_version: "1.0"
+source: "Adyen Transfers API v4 documentation and explicit integration review"
+reason: "Select payout operations and bind required Adyen fields to the host operation contract"
+
+operations:
+  "GET /transfers":
+    intent: unknown
+
+status_mapping:
+  received: in_progress
+  refused: rejected
+  authorised: in_progress
+  booked: approved
+  failed: rejected
+  returned: rejected
+
+field_mappings:
+  create_payout:
+    request:
+      - target: category
+        location: body
+        value: internal
+        confirm: true
+      - target: counterparty
+        location: body
+        source: operation.payout_requisite
+        confirm: true
+      - target: amount.currency
+        location: body
+        value: EUR
+        confirm: true
+      - target: Idempotency-Key
+        location: header
+        source: operation.id
+        confirm: true
+
+transformations:
+  amount:
+    provider_unit: minor
+    direction: major_to_minor
+    factor: 100

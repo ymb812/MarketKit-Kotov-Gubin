@@ -102,6 +102,41 @@ class AnalyzerReviewContractsTest < Minitest::Test
                  mappings.map { |mapping| [mapping["http_status"], mapping["source"]] }
   end
 
+  def test_response_mapping_prefers_direct_resource_fields_and_ignores_boolean_status
+    operation = operation_with(
+      method: "POST",
+      path: "/transfers",
+      request_schema: object_schema({ "amount" => { "kind" => "integer", "description" => "cents" } }),
+      responses: {
+        "201" => response_with(
+          object_schema(
+            {
+              "account" => object_schema({ "id" => { "kind" => "string" } }),
+              "id" => { "kind" => "string" },
+              "status" => { "kind" => "string", "enum" => %w[received booked] },
+              "metadata" => object_schema({ "state" => { "kind" => "string" } })
+            }
+          )
+        ),
+        "202" => response_with(object_schema({ "status" => { "kind" => "boolean" } }))
+      }
+    )
+
+    mappings = field_analyzer(operation, "create_payout").dig("field_mappings", "create_payout", "response")
+
+    assert_equal [["201", "id", "provider_operation_id"], ["201", "status", "status"]],
+                 mappings.map { |mapping| [mapping["http_status"], mapping["source"], mapping["role"]] }
+  end
+
+  def test_code_path_parameter_maps_to_provider_operation_key
+    operation = operation_with(parameters: [path_parameter("code")])
+
+    mapping = field_analyzer(operation, "fetch_status").dig("field_mappings", "fetch_status", "request", 0)
+
+    assert_equal "operation.provider_operation_key", mapping["source_candidate"]
+    assert_equal false, mapping["requires_review"]
+  end
+
   def test_colliding_auth_types_receive_distinct_env_names
     schemes = {
       "ClientKey" => auth_scheme("header", "X-Client-Key"),

@@ -1,0 +1,246 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "rbconfig"
+require "stringio"
+require "tmpdir"
+require "yaml"
+
+project_root = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(project_root, "lib"))
+require "integration_generator"
+
+module Provider
+  class BaseService
+    attr_reader :platform_actions
+
+    def initialize
+      @platform_actions = []
+    end
+
+    def success(payload = nil, **keywords)
+      (payload.is_a?(Hash) ? payload : {}).merge(keywords).merge(success: true)
+    end
+
+    def failure(code, message)
+      { success: false, code: code, message: message }
+    end
+
+    def approve_operation(operation_id)
+      @platform_actions << { action: :approve, operation_id: operation_id }
+      success
+    end
+
+    def reject_operation(operation_id, reason)
+      @platform_actions << { action: :reject, operation_id: operation_id, reason: reason }
+      success
+    end
+  end unless const_defined?(:BaseService, false)
+end
+
+module HackGenesisRealProviderDemo
+  class OutputExistsError < StandardError; end
+
+  FakeClient = Struct.new(:response, :requests) do
+    def call(**request)
+      requests << request
+      response
+    end
+  end
+
+  SCENARIOS = [
+    { name: "adyen_transfer_v4", spec: "adyen_transfer_v4.yaml", class_name: :AdyenTransferV4Service },
+    { name: "airwallex_transfer", spec: "airwallex_transfer.json", class_name: :AirwallexTransferService }
+  ].freeze
+  REQUIRED_ARTIFACTS = %w[INTEGRATION.md compatibility_report.md fixtures.json integration_manifest.yml].freeze
+
+  class << self
+    def start(argv, out: $stdout, err: $stderr, root: project_root)
+      options = parse_options(argv, out:)
+      return 0 if options == :help
+
+      run_root = prepare_run_root(options[:output], root)
+      out.puts "Real-provider demo: #{run_root}"
+      out.puts "OFFLINE: provider endpoints are not called; generated services use a recording fake client."
+
+      SCENARIOS.each do |scenario|
+        bundle, manifest = generate_bundle(scenario, run_root:, err:, root:)
+        source = IntegrationGenerator::OpenAPI::Loader.load_file(real_path(scenario.fetch(:spec), root))
+                                                   .fetch("x-hackgenesis-source")
+        out.puts "\n#{scenario.fetch(:name)}"
+        out.puts "- official source: #{source.fetch('repository')} @ #{source.fetch('commit')}"
+        out.puts "- generated: 5 artifacts; ruby -c OK; #{detected_count(manifest)}/5 capabilities detected"
+        send("exercise_#{scenario.fetch(:name)}", bundle, scenario, out:)
+      end
+
+      out.puts "\nPASS: two pinned official OpenAPI examples generated and exercised through the runtime boundary."
+      0
+    rescue OptionParser::ParseError => error
+      err.puts "[REAL_DEMO_USAGE] #{error.message}"
+      2
+    rescue OutputExistsError => error
+      err.puts "[REAL_DEMO_OUTPUT_EXISTS] #{error.message}"
+      2
+    rescue StandardError => error
+      err.puts "[REAL_DEMO_FAILED] #{error.message}"
+      1
+    end
+
+    private
+
+    def parse_options(argv, out:)
+      options = {}
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: bundle exec ruby bin/real_provider_demo [--output NEW_DIR]"
+        opts.on("--output DIR", "New output root; an existing path is rejected") { |value| options[:output] = value }
+        opts.on("-h", "--help", "Show this help") do
+          out.puts opts
+          return :help
+        end
+      end
+      parser.parse!(argv)
+      raise OptionParser::InvalidOption, argv.join(" ") unless argv.empty?
+
+      options
+    end
+
+    def prepare_run_root(requested_output, root)
+      if requested_output
+        target = File.expand_path(requested_output)
+        raise OutputExistsError, "#{target} already exists" if File.exist?(target)
+
+        FileUtils.mkdir_p(File.dirname(target))
+        Dir.mkdir(target)
+        return target
+      end
+
+      output_root = File.join(root, "output")
+      FileUtils.mkdir_p(output_root)
+      Dir.mktmpdir("real-providers-", output_root)
+    end
+
+    def generate_bundle(scenario, run_root:, err:, root:)
+      name = scenario.fetch(:name)
+      target = File.join(run_root, name)
+      output = StringIO.new
+      errors = StringIO.new
+      status = IntegrationGenerator::CLI.start(
+        [
+          "generate", "--spec", real_path(scenario.fetch(:spec), root),
+          "--provider", name,
+          "--overrides", real_path("#{name}_overrides.yaml", root),
+          "--output", target
+        ],
+        out: output,
+        err: errors
+      )
+      unless status.zero?
+        err.puts errors.string
+        raise "CLI generation failed for #{name}"
+      end
+
+      service = File.join(target, "#{name}_service.rb")
+      expected = (REQUIRED_ARTIFACTS + [File.basename(service)]).sort
+      raise "Unexpected artifacts for #{name}" unless Dir.children(target).sort == expected
+
+      _stdout, syntax_error, syntax_status = Open3.capture3(RbConfig.ruby, "-c", service)
+      raise "ruby -c failed for #{name}: #{syntax_error.strip}" unless syntax_status.success?
+
+      [target, YAML.safe_load(File.read(File.join(target, "integration_manifest.yml")), aliases: false)]
+    end
+
+    def exercise_adyen_transfer_v4(bundle, scenario, out:)
+      service_class = load_service(bundle, scenario)
+      env_name = service_class::ADAPTER_CONFIG.fetch("auth").fetch("schemes")
+                              .find { |scheme| scheme["name"] == "ApiKeyAuth" }.fetch("config_env")
+      ENV[env_name] = "demo-adyen-key"
+      client = FakeClient.new(
+        { status: 200, headers: {}, body: { "id" => "TR_demo", "status" => "received" } },
+        []
+      )
+      service = service_class.new
+      service.provider_client = client
+      result = service.create_request({
+        "id" => "host-demo-1", "amount" => "12.34",
+        "payout_requisite" => { "balanceAccountId" => "BA_demo" }
+      })
+      raise "Adyen success response was not normalized" unless result.dig(:result, :id) == "TR_demo"
+
+      request = client.requests.fetch(0)
+      client.response = { status: 200, headers: {}, body: { "id" => "TR_demo", "status" => "booked" } }
+      service.fetch_status({ "id" => "host-demo-1", "provider_operation_key" => "TR/demo" })
+      raise "Adyen booked status was not approved" unless service.platform_actions.last == { action: :approve, operation_id: "host-demo-1" }
+
+      out.puts "- runtime: #{request[:method].upcase} #{request[:url]}; API key + idempotency + amount mapping; 200 id normalized"
+      out.puts "- status: booked -> approve_operation; path id is URL-encoded"
+    ensure
+      ENV.delete(env_name) if env_name
+    end
+
+    def exercise_airwallex_transfer(bundle, scenario, out:)
+      service_class = load_service(bundle, scenario)
+      env_name = service_class::ADAPTER_CONFIG.fetch("auth").fetch("schemes").first.fetch("config_env")
+      ENV[env_name] = "demo-airwallex-token"
+      client = FakeClient.new(
+        { status: 201, headers: {}, body: { "id" => "AWX_demo", "status" => "PENDING" } },
+        []
+      )
+      service = service_class.new
+      service.provider_client = client
+      operation = { "id" => "host-demo-2", "amount" => "50.25", "recipient_code" => "BEN_demo" }
+      result = service.create_request(operation)
+      raise "Airwallex success response was not normalized" unless result.dig(:result, :id) == "AWX_demo"
+
+      request = client.requests.fetch(0)
+      error_response = {
+        status: 400,
+        headers: {},
+        body: { "code" => "declaration_required", "message" => "Additional declaration is required" }
+      }
+      normalized_error = service.send(:normalize_response, error_response, "create_payout")
+      unless normalized_error[:provider_code] == "declaration_required" && normalized_error[:message] == "Additional declaration is required"
+        raise "Airwallex provider error fields were not normalized"
+      end
+
+      client.response = { status: 200, headers: {}, body: { "id" => "AWX_demo", "status" => "PENDING" } }
+      status_result = service.fetch_status({ "id" => "host-demo-2", "provider_operation_key" => "AWX/demo" })
+      raise "Airwallex fetch response was not successful" unless status_result[:success]
+      fetch_url = client.requests.last.fetch(:url)
+
+      client.response = { status: 200, headers: {}, body: {} }
+      cancel = service.cancel_payout({ "id" => "host-demo-2", "provider_operation_key" => "AWX/demo" })
+      raise "Airwallex cancel response was not successful" unless cancel[:success]
+      cancel_url = client.requests.last.fetch(:url)
+
+      out.puts "- runtime: #{request[:method].upcase} #{request[:url]}; Bearer auth + beneficiary/amount/currency mapping; 201 id normalized"
+      out.puts "- response: HTTP 400 provider code/message normalized; fetch: #{fetch_url}; cancel: #{cancel_url}"
+    ensure
+      ENV.delete(env_name) if env_name
+    end
+
+    def load_service(bundle, scenario)
+      name = scenario.fetch(:class_name)
+      Provider.send(:remove_const, name) if Provider.const_defined?(name, false)
+      load File.join(bundle, "#{scenario.fetch(:name)}_service.rb")
+      Provider.const_get(name)
+    end
+
+    def detected_count(manifest)
+      manifest.fetch("capabilities").count { |_name, capability| capability["status"] == "detected" }
+    end
+
+    def real_path(name, root)
+      File.join(root, "examples", "real", name)
+    end
+
+    def project_root
+      File.expand_path("..", __dir__)
+    end
+  end
+end
+
+exit HackGenesisRealProviderDemo.start(ARGV) if $PROGRAM_NAME == __FILE__

@@ -1,0 +1,49 @@
+override_version: "1.0"
+source: "Airwallex Payouts API documentation and explicit integration review"
+reason: "Bind the required transfer fields to the host operation contract without changing generic rules"
+
+field_mappings:
+  create_payout:
+    request:
+      - target: beneficiary
+        location: body
+        source: operation.payout_requisite
+        confirm: true
+      - target: beneficiary_id
+        location: body
+        source: operation.recipient_code
+        confirm: true
+      - target: payer.additional_info.external_id
+        location: body
+        source: operation.payer_external_id
+        confirm: true
+      - target: source_amount
+        location: body
+        source: operation.source_amount
+        confirm: true
+      - target: transfer_amount
+        location: body
+        source: operation.amount
+        confirm: true
+      - target: reason
+        location: body
+        value: payout
+        confirm: true
+      - target: reference
+        location: body
+        source: operation.id
+        confirm: true
+      - target: request_id
+        location: body
+        source: operation.id
+        confirm: true
+      - target: transfer_currency
+        location: body
+        value: EUR
+        confirm: true
+
+transformations:
+  amount:
+    provider_unit: major
+    direction: none
+    factor: 1

@@ -1,8 +1,8 @@
 # Руководство для проверки решения
 
-Самый короткий способ проверить проект — запустить `bundle exec ruby bin/demo`. Команда проводит три различающиеся OpenAPI-спецификации через один публичный Ruby pipeline, создаёт по пять файлов на провайдера и проверяет синтаксис каждого generated service. Ниже собраны ожидаемый результат, доказательства по всем подкритериям и границы, за которые решение не выдаётся.
+Самый короткий способ проверить проект — запустить `bundle exec ruby bin/demo`. Отдельная команда `bundle exec ruby bin/real_provider_demo` повторяет тот же pipeline на официальных OpenAPI Adyen и Airwallex и исполняет generated services через recording client. Ниже собраны ожидаемый результат, доказательства по всем подкритериям и границы, за которые решение не выдаётся.
 
-Документ актуализирован после contract/remediation review 6 сентября 2026 года: **134 tests / 792 assertions, 0 failures, 0 errors, 0 skips**; frontend logic **7/7**; три полных bundle; manifest-only byte comparison; Windows-запуск из корня в Unicode-пути с пробелами; локальная HTTP-генерация и скачивание. Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
+Документ актуализирован после третьего чекпоинта 6 сентября 2026 года: **149 tests / 887 assertions, 0 failures, 0 errors, 0 skips**; frontend logic **7/7**; три synthetic и два official real-provider input; manifest-only byte comparison; Windows-запуск из корня в Unicode-пути с пробелами; локальная HTTP-генерация и скачивание. Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
 
 ## Проверка за несколько минут
 
@@ -55,7 +55,16 @@ Compare-Object $fromSpec $fromManifest -Property Name, Hash
 bundle exec rake test
 ```
 
-Зафиксированный результат на текущем завершённом core — 134 runs и 792 assertions без failures/errors/skips. Подробная установка, Windows-оговорки и UI находятся в [README.md](README.md); сценарий выступления — в [DEMO_GUIDE.md](DEMO_GUIDE.md).
+Проверка на официальных спецификациях:
+
+```powershell
+bundle exec ruby bin/real_provider_demo
+bundle exec ruby -Itest test/real_providers/real_provider_examples_test.rb
+```
+
+Adyen проверяет API key, idempotency, сумму в minor units, create/fetch, provider id и `booked -> approve_operation`. Airwallex проверяет Bearer auth, create/fetch/cancel, поля transfer, provider id и детали HTTP 400. Это offline runtime contract test без секретов и внешних вызовов; точные upstream commits/hashes и честная граница описаны в [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md). Матрица тестов по всем 10+8+7 баллам критерия 2 — в [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md).
+
+Зафиксированный результат текущей полной suite указан в [README.md](README.md) и [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md). Подробная установка, Windows-оговорки и UI находятся в README; сценарий прошедшего третьего чекпоинта — в [DEMO_GUIDE.md](DEMO_GUIDE.md).
 
 ## Что именно строит проект
 
@@ -90,11 +99,11 @@ OpenAPI → Generic IR → semantic analysis → inferred manifest
 
 ### E2. Generated service — 25
 
-**E2.1 — формирование и отправка запросов, 10.** [`ServiceGenerator`](lib/integration_generator/generator/service_generator.rb) создаёт `Provider::<Name>Service < Provider::BaseService`. `create_request` строит и отправляет запрос, разбирает ответ и возвращает `success(result: { id: provider_id })`; `create_payout` — совместимый alias, `build_provider_request` — отдельная inspection-граница. Fetch/cancel читают `operation.provider_operation_key`. [`generated_service_contract_test.rb`](test/generator/generated_service_contract_test.rb) проверяет этот callback-контракт платформы и SBP/card mapping, [`alt_withdrawal_service_contract_test.rb`](test/generator/alt_withdrawal_service_contract_test.rb) — alternative fetch/cancel/balance с Basic auth.
+**E2.1 — формирование и отправка запросов, 10.** [`ServiceGenerator`](lib/integration_generator/generator/service_generator.rb) создаёт `Provider::<Name>Service < Provider::BaseService`. `create_request` строит и отправляет запрос, разбирает ответ и возвращает `success(result: { id: provider_id })`; `create_payout` — совместимый alias, `build_provider_request` — отдельная inspection-граница. Fetch/cancel читают `operation.provider_operation_key`. [`generated_service_contract_test.rb`](test/generator/generated_service_contract_test.rb) проверяет этот callback-контракт платформы и SBP/card mapping, [`alt_withdrawal_service_contract_test.rb`](test/generator/alt_withdrawal_service_contract_test.rb) — alternative fetch/cancel/balance с Basic auth, а [`real_provider_examples_test.rb`](test/real_providers/real_provider_examples_test.rb) — точные requests Adyen и Airwallex.
 
-**E2.2 — ответы, статусы и ошибки, 8.** Generated `normalize_response` выбирает mapping по фактическому HTTP status, exact response имеет приоритет над range/default. Публичная граница переводит ошибки в стандартные платформенные symbols: `bad_request`, `unauthorized`, `forbidden`, `unprocessable_entity`, `too_many_requests`, `internal_server_error`; provider-specific symbols не создаются. `amount_limit_exceeded` означает validation rejection конкретной выплаты. [`runtime_review_test.rb`](test/generator/runtime_review_test.rb) исполняет разные 2xx schemas, malformed JSON и HTTP 400/401/402/422/429/500.
+**E2.2 — ответы, статусы и ошибки, 8.** Generated `normalize_response` выбирает mapping по фактическому HTTP status, exact response имеет приоритет над range/default. Публичная граница переводит ошибки в стандартные платформенные symbols: `bad_request`, `unauthorized`, `forbidden`, `unprocessable_entity`, `too_many_requests`, `internal_server_error`; provider-specific symbols не создаются. `amount_limit_exceeded` означает validation rejection конкретной выплаты. [`runtime_review_test.rb`](test/generator/runtime_review_test.rb) исполняет разные 2xx schemas, malformed JSON и HTTP 400/401/402/422/429/500; real-provider test дополнительно проверяет Adyen lifecycle и Airwallex 201/error payload.
 
-**E2.3 — callbacks и конфигурация подключения, 7.** Servers/security/ENV placeholders приходят из final manifest. Host аутентифицирует parsed payload до вызова `process_callback`; terminal status вызывает `approve_operation(provider_id)` или `reject_operation(provider_id, reason)`, а in-progress/unknown не меняет операцию. `process_verified_callback(raw_body, headers:)` проверяет HMAC-SHA256 hex/base64 на исходных байтах и разбирает именно подписанное тело. Tampered bytes, missing config, status-path precedence и nested callback проверяются в трёх runtime contract suites. Callback secret намеренно не генерируется.
+**E2.3 — callbacks и конфигурация подключения, 7.** Servers/security/ENV placeholders приходят из final manifest. Host аутентифицирует parsed payload до вызова `process_callback`; terminal status вызывает `approve_operation(provider_id)` или `reject_operation(provider_id, reason)`, а in-progress/unknown не меняет операцию. `process_verified_callback(raw_body, headers:)` проверяет HMAC-SHA256 hex/base64 на исходных байтах и разбирает именно подписанное тело. Tampered bytes, missing config, status-path precedence и nested callback проверяются в трёх runtime contract suites. Callback secret намеренно не генерируется. Полный test crosswalk для E2 вынесен в [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md).
 
 ### E3. Преобразования — 15
 
@@ -104,7 +113,7 @@ OpenAPI → Generic IR → semantic analysis → inferred manifest
 
 ### E4. Универсальность — 15
 
-**E4.1 — разные спецификации, 7.** [NovaPay YAML](examples/provider_api.yaml), [transfer JSON](examples/alt_transfer_provider.json) и [withdrawal YAML](examples/alt_withdrawal_provider.yaml) различаются версией/форматом, endpoint и field names, набором методов, API key/Bearer/Basic, server variables, nested responses/callbacks, наличием `operationId` и signature encoding. [`demo_test.rb`](test/demo_test.rb), [`manifest_builder_test.rb`](test/analyzer/manifest_builder_test.rb) и [`artifact_bundle_test.rb`](test/generator/artifact_bundle_test.rb) проводят их через один pipeline. Два альтернативных входа — самостоятельные test fixtures, а не production-подключения к публичным провайдерам.
+**E4.1 — разные спецификации, 7.** [NovaPay YAML](examples/provider_api.yaml), [transfer JSON](examples/alt_transfer_provider.json) и [withdrawal YAML](examples/alt_withdrawal_provider.yaml) различаются версией/форматом, endpoint и field names, набором методов, API key/Bearer/Basic, server variables, nested responses/callbacks, наличием `operationId` и signature encoding. [`demo_test.rb`](test/demo_test.rb), [`manifest_builder_test.rb`](test/analyzer/manifest_builder_test.rb) и [`artifact_bundle_test.rb`](test/generator/artifact_bundle_test.rb) проводят их через один pipeline. Дополнительно pinned [Adyen YAML](examples/real/adyen_transfer_v4.yaml) и [Airwallex JSON](examples/real/airwallex_transfer.json) взяты из официальных репозиториев и проходят generation/runtime assertions в [`real_provider_examples_test.rb`](test/real_providers/real_provider_examples_test.rb).
 
 **E4.2 — отсутствие provider hardcode, 5.** Parser строит Generic IR, analyzers — manifest, generators читают только final manifest. [`artifact_bundle_test.rb`](test/generator/artifact_bundle_test.rb), тест `test_bundle_can_be_built_from_serialized_manifest_without_openapi`, заменяет parser на исключение и всё равно получает bundle. `generate --manifest` воспроизводит эту границу через CLI. Отсутствие имени NovaPay в `lib/` — дополнительная проверка, но основное доказательство даёт dependency boundary и alternative runtime tests.
 
@@ -200,16 +209,18 @@ Transfer-вариант важен именно неполнотой: отсут
 - Create возвращает нормализованный provider id через `success(result: ...)`; terminal fetch/callback меняют статус только BaseService-хелперами. Persistence выполняет платформа.
 - Новые типы реквизитов требуют подтверждённой схемы host-модели и явного mapping; одинаковое имя provider field не считается доказательством.
 - `ruby -c` подтверждает синтаксис; runtime contract tests подтверждают локальный adapter contract. Это не сертификат совместимости с production API.
-- Две альтернативные спеки созданы для structural testing и не выдаются за реальные публичные provider integrations.
+- Две alternative fixture-спеки созданы для structural edge-case testing. Отдельные Adyen/Airwallex snapshots взяты из официальных публичных OpenAPI, но проверяются offline и не выдаются за live sandbox certification.
 - Generated RSpec пока не создаётся. В проекте есть runtime contract tests генератора и JSON fixtures с provenance.
 - Полная validation любого произвольно отредактированного manifest и полное контекстное Markdown escaping остаются в backlog.
-- Локальный browser flow проверен во встроенном браузере Codex; перед третьим чекпоинтом требуется только smoke фактического браузера записи и просмотр готового видео. Chrome/проектор и slide deck относятся к возможной финальной защите.
+- Локальный browser flow и экранное видео проверены на прошедшем третьем чекпоинте. Chrome/проектор и slide deck относятся только к возможной финальной защите.
 
 ## Навигация по репозиторию
 
 | Нужно понять | Документ |
 |---|---|
 | Установка, команды, UI, overrides и supported subset | [README.md](README.md) |
+| Официальные OpenAPI Adyen/Airwallex и воспроизводимость | [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md) |
+| Реализация и tests по 10+8+7 баллам сервиса | [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md) |
 | Модули, их входы/выходы, зависимости и расширение | [MODULE_MAP.md](MODULE_MAP.md) |
 | Пошаговая live-демонстрация и резервный CLI-сценарий | [DEMO_GUIDE.md](DEMO_GUIDE.md) |
 | Устный текст третьего чекпоинта и монтажная карта | [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) |
