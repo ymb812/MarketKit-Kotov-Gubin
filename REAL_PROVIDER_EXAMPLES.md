@@ -62,3 +62,9 @@ bundle exec ruby bin/refresh_real_examples
 Подтверждено: реальные официальные схемы парсятся тем же generic pipeline, из них генерируются все пять артефактов, generated Ruby синтаксически валиден и исполняет transport-independent request/response контракт.
 
 Не подтверждено и не заявляется: авторизованный live-вызов production/sandbox аккаунта, provider-side бизнес-валидация конкретного merchant и сертификация интеграции провайдером.
+
+В final manifest Adyen остаются 116 warnings, Airwallex — 21; оба compatibility reports имеют `NEEDS REVIEW`. Среди них есть неподдержанные schema keywords Adyen, неподтверждённые статусы и предупреждения inference, сохранённые после overrides без явного resolve-selector. Количество detected capabilities не означает полную готовность этих интеграций.
+
+Adyen demo использует `category: internal`, EUR и перевод между balance accounts; он не доказывает external bank payout. Airwallex demo использует заранее известный `beneficiary_id` из явно заданного `operation.recipient_code`; это пример расширения host mapping, а не гарантированное Q&A поле платформы. У Airwallex нет enum-backed status mapping: `PENDING` не вызывает terminal action. Эти примеры дополняют canonical payout proof.
+
+Snapshots фиксируются с LF через `.gitattributes`; refresh пишет UTF-8 bytes без платформенной замены переводов строк. Проверенные SHA-256 локальных snapshots: Adyen `fda275e9d189087ee8f50b522039c0aade75697ec131d93dda3171949800cb06`, Airwallex `19440873342ba5437b7774d720ca0ccaa8fe9f206d81cfe9e6d5dbebbd209f7e`. Полные upstream hashes в таблицах выше не менялись.

@@ -2,7 +2,7 @@
 
 Самый короткий способ проверить проект — запустить `bundle exec ruby bin/demo`. Отдельная команда `bundle exec ruby bin/real_provider_demo` повторяет тот же pipeline на официальных OpenAPI Adyen и Airwallex и исполняет generated services через recording client. Ниже собраны ожидаемый результат, доказательства по всем подкритериям и границы, за которые решение не выдаётся.
 
-Документ актуализирован после третьего чекпоинта 6 сентября 2026 года: **149 tests / 887 assertions, 0 failures, 0 errors, 0 skips**; frontend logic **7/7**; три synthetic и два official real-provider input; manifest-only byte comparison; Windows-запуск из корня в Unicode-пути с пробелами; локальная HTTP-генерация и скачивание. Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
+Документ актуализирован после третьего чекпоинта 6 сентября 2026 года: **152 tests / 899 assertions, 0 failures, 0 errors, 0 skips**; frontend logic **7/7**; три synthetic и два official real-provider input; manifest-only byte comparison; Windows-запуск из корня в Unicode-пути с пробелами; локальная HTTP-генерация и скачивание. Это доказательство заявленного subset, а не поддержка всего OpenAPI и не production-сертификация интеграции.
 
 ## Проверка за несколько минут
 
@@ -64,7 +64,7 @@ bundle exec ruby -Itest test/real_providers/real_provider_examples_test.rb
 
 Adyen проверяет API key, idempotency, сумму в minor units, create/fetch, provider id и `booked -> approve_operation`. Airwallex проверяет Bearer auth, create/fetch/cancel, поля transfer, provider id и детали HTTP 400. Это offline runtime contract test без секретов и внешних вызовов; точные upstream commits/hashes и честная граница описаны в [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md). Матрица тестов по всем 10+8+7 баллам критерия 2 — в [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md).
 
-Зафиксированный результат текущей полной suite указан в [README.md](README.md) и [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md). Подробная установка, Windows-оговорки и UI находятся в README; сценарий прошедшего третьего чекпоинта — в [DEMO_GUIDE.md](DEMO_GUIDE.md).
+Зафиксированный результат текущей полной suite указан в [README.md](README.md). Подробная установка, Windows-оговорки и UI находятся в README; сценарий прошедшего третьего чекпоинта — в [DEMO_GUIDE.md](DEMO_GUIDE.md).
 
 ## Что именно строит проект
 
@@ -212,6 +212,7 @@ Transfer-вариант важен именно неполнотой: отсут
 - Две alternative fixture-спеки созданы для structural edge-case testing. Отдельные Adyen/Airwallex snapshots взяты из официальных публичных OpenAPI, но проверяются offline и не выдаются за live sandbox certification.
 - Generated RSpec пока не создаётся. В проекте есть runtime contract tests генератора и JSON fixtures с provenance.
 - Полная validation любого произвольно отредактированного manifest и полное контекстное Markdown escaping остаются в backlog.
+- Прицельные ограничения runtime перечислены в README: card-only canonical input, body вне create, одинаково подходящие response paths и application errors внутри HTTP 2xx не покрыты полноценной интеграцией. Provider error details проверяются внутри нормализации; публичный failure оставляет platform code/message. Fetch helper использует host id, callback helper — provider id.
 - Локальный browser flow и экранное видео проверены на прошедшем третьем чекпоинте. Chrome/проектор и slide deck относятся только к возможной финальной защите.
 
 ## Навигация по репозиторию

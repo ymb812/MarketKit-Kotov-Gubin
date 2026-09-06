@@ -209,7 +209,9 @@ class RuntimeReviewTest < Minitest::Test
     status_operation["parameters"] << { "name" => "merchant_id", "in" => "path", "required" => true, "schema" => { "type" => "string" } }
     @raw["paths"]["/merchants/{merchant_id}/payouts/{payout_id}"] = { "get" => status_operation }
     service, = generated_service
-    assert_raises(ArgumentError) { service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1" }) }
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) do
+      service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1" })
+    end
 
     @overrides["field_mappings"]["fetch_status"] = { "request" => [
       { "target" => "merchant_id", "location" => "path", "source" => "operation.merchant_id", "confirm" => true }
@@ -218,6 +220,43 @@ class RuntimeReviewTest < Minitest::Test
     client.response = { status: 200, headers: {}, body: { "id" => "np_1", "status" => "completed" } }
     service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1", "merchant_id" => "m/2" })
     assert_equal "https://api.sandbox.novapay.example/v1/merchants/m%2F2/payouts/np_1", client.requests.last[:url]
+  end
+
+  def test_ambiguous_path_identifiers_require_review_before_dispatch
+    item = @raw["paths"].delete("/payouts/{payout_id}")
+    item["get"]["parameters"] << { "name" => "transfer_id", "in" => "path", "required" => true, "schema" => { "type" => "string" } }
+    @raw["paths"]["/transfers/{transfer_id}/payouts/{payout_id}"] = item
+    service, client = generated_service
+    input = { "id" => "op_1", "provider_operation_key" => "np/1", "transfer_key" => "tr/2" }
+
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) { service.fetch_status(input) }
+    assert_empty client.requests
+
+    @overrides["field_mappings"]["fetch_status"] = { "request" => [
+      { "target" => "payout_id", "location" => "path", "source" => "operation.provider_operation_key", "confirm" => true },
+      { "target" => "transfer_id", "location" => "path", "source" => "operation.transfer_key", "confirm" => true }
+    ] }
+    service, client = generated_service
+    client.response = { status: 200, headers: {}, body: { "status" => "pending" } }
+    service.fetch_status(input)
+    assert_equal "https://api.sandbox.novapay.example/v1/transfers/tr%2F2/payouts/np%2F1", client.requests.last[:url]
+  end
+
+  def test_scoped_servers_and_environment_override_control_dispatch_url
+    @raw["paths"]["/payouts"]["servers"] = [{ "url" => "https://path.example/v2" }]
+    service, = generated_service
+    assert_equal "https://path.example/v2/payouts", service.build_provider_request(operation)[:url]
+
+    @raw["paths"]["/payouts"]["post"]["servers"] = [{
+      "url" => "https://{region}.example/v3", "variables" => { "region" => { "default" => "eu" } }
+    }]
+    service, = generated_service
+    assert_equal "https://eu.example/v3/payouts", service.build_provider_request(operation)[:url]
+
+    ENV["RUNTIME_REVIEW_BASE_URL"] = "https://configured.example/v4/"
+    assert_equal "https://configured.example/v4/payouts", service.build_provider_request(operation)[:url]
+    ENV["RUNTIME_REVIEW_BASE_URL"] = "https://{missing}.example"
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) { service.build_provider_request(operation) }
   end
 
   private

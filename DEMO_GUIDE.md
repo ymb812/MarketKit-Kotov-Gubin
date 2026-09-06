@@ -1,6 +1,6 @@
 # Payout Studio — guide для защиты
 
-Актуально на 6 сентября 2026. Для третьего чекпоинта этот сценарий записывается как экранное видео; команда рассказывает текст из `PRESENTATION_CONTENT.md` на его фоне. Slide deck не нужен. Основной видеоряд — локальный UI, CLI остаётся резервом.
+Исторический сценарий завершённого третьего чекпоинта: экранное видео и устный доклад уже показаны. Инструкции записи ниже сохранены как архив; выполнять их перед передачей кода не требуется. Для актуальной проверки используйте README и JURY_GUIDE. Основной видеоряд — локальный UI, CLI остаётся воспроизводимым резервом.
 
 > **Регламент: 8 минут.** Монтаж и текст заканчиваются к 7:35; оставшиеся 25 секунд — резерв на паузы и переходы. После записи один раз синхронно прочитать весь текст и при необходимости сокращать кадры вместе с репликами.
 
@@ -69,11 +69,11 @@ bundle exec ruby bin/demo
 
 ## Границы обещаний
 
-`create_request` возвращает `success(result: { id: provider_id })`. `fetch_status` и `process_callback` применяют terminal status через BaseService helpers; parsed callback должен быть аутентифицирован хостом. Для показа HMAC открывайте `process_verified_callback(raw_body, headers:)`. Актуальные числа проверок находятся в [JURY_GUIDE.md](JURY_GUIDE.md). После итогового readiness-review остаётся записать видеоряд и один раз синхронизировать его с устным текстом.
+`create_request` возвращает `success(result: { id: provider_id })`. `fetch_status` и `process_callback` применяют terminal status через BaseService helpers; parsed callback должен быть аутентифицирован хостом. Для показа HMAC открывайте `process_verified_callback(raw_body, headers:)`. Актуальные числа проверок находятся в [JURY_GUIDE.md](JURY_GUIDE.md). Запись и устное выступление завершены; это не оставшиеся действия перед передачей репозитория.
 
 Поддерживается заявленный в README subset OpenAPI 3.x с local refs. Не заявляем весь OpenAPI/JSON Schema, remote refs, OAuth runtime, OpenAPI callbacks keyword, production certification или точное совпадение с недоступным production host. Обычный webhook POST поддержан. Generated RSpec-файл пока не создаётся; runtime contract tests самого проекта есть. Полный JSON Schema validator в generated runtime не реализован.
 
-## Последняя проверка текущей версии
+## Историческая проверка версии третьего чекпоинта
 
 - Ruby suite: **134 tests, 792 assertions**, без failures/errors/skips; frontend logic: **7/7**, `node --check` — PASS.
 - `bin/demo`: три providers с пятью артефактами каждый, `ruby -c` успешен; предфинальный прогон `output/prefinal-20260906-105139/`.

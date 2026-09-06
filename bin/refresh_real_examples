@@ -143,6 +143,6 @@ SOURCES.each do |source|
   document = focused_document(source, download(source))
   target = File.join(target_root, source.fetch(:target))
   rendered = File.extname(target) == ".json" ? JSON.pretty_generate(document) : YAML.dump(document)
-  File.write(target, rendered, mode: "w:utf-8")
+  File.binwrite(target, rendered.encode(Encoding::UTF_8))
   puts "#{target}: #{Digest::SHA256.file(target).hexdigest}"
 end

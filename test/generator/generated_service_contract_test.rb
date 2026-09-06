@@ -224,6 +224,22 @@ class GeneratedServiceContractTest < Minitest::Test
     assert_equal "operation.amount_limit_exceeded", result[:message]
   end
 
+  def test_callback_without_operation_id_cannot_apply_a_terminal_action
+    remove_generated_service(:NovapayService)
+    eval(canonical_artifacts(overridden: true).fetch("novapay_service.rb"), TOPLEVEL_BINDING, "generated/novapay_service.rb")
+    service = Provider::NovapayService.new
+    assert_raises(Provider::NovapayService::ProviderError) do
+      service.process_callback({ "status" => "completed" })
+    end
+    ENV["NOVAPAY_WEBHOOK_SECRET"] = "callback-secret"
+    raw_body = JSON.generate("payout_id" => "", "status" => "failed")
+    signature = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("NOVAPAY_WEBHOOK_SECRET"), raw_body)
+    assert_raises(Provider::NovapayService::ProviderError) do
+      service.process_verified_callback(raw_body, headers: { "X-NovaPay-Signature" => signature })
+    end
+    assert_empty service.platform_actions
+  end
+
   private
 
   def canonical_artifacts(overridden: false)

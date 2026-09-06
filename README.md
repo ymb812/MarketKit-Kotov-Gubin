@@ -31,6 +31,8 @@ Runtime не использует LLM или внешние API. Полный pi
 
 `JURY_GUIDE.md` — основная точка входа для оценки: там есть короткий reproducible flow, все 16 экспертных подкритериев, технический crosswalk, точные ссылки на реализацию/тесты и границы заявленного результата.
 
+Минимальный маршрут жюри: README → [критерии](JURY_GUIDE.md) → [реальные провайдеры](REAL_PROVIDER_EXAMPLES.md) → [тестовые доказательства сервиса](CRITERION_2_TEST_EVIDENCE.md) → [архитектура](MODULE_MAP.md). Доклад и видеосценарий — исторические вспомогательные материалы завершённого чекпоинта.
+
 ## Требования
 
 - Ruby 3.1 или новее;
@@ -339,6 +341,12 @@ Parser поддерживает OpenAPI 3.x YAML/JSON, local JSON Pointer refere
 - исполнение OAuth/OpenID/mTLS авторизации;
 - exact production `Provider::BaseService`, operation model и HTTP client contract — generated service предоставляет документированный adapter boundary.
 
+Runtime также не является полным JSON Schema/HTTP serializer: scalar enum/pattern/min/max извлекаются, но не все исполняются; `style/explode` и произвольные media types требуют host transport. Body mappings генерируются для create; fetch/cancel используют parameters, balance — адрес/auth без пользовательских mappings. Application error внутри HTTP 2xx не превращается автоматически в failure. При нескольких одинаково подходящих response id/status paths выбирается детерминированный кандидат, поэтому такие response schemas требуют ручной проверки manifest. Полная совместимость подобных вариантов не заявляется.
+
+Для canonical card flow структурная схема `Recipient` требует `phone` при любом `type`; adapter сохраняет это требование. Тест карты проверяет `card_number` вместе с заполненным SBP phone, а не полноценную card-only операцию. Менять официальную OpenAPI или угадывать другую бизнес-семантику генератор не должен.
+
+Публичный `failure` содержит platform code/message; детали provider code/message и `Retry-After` доступны внутри нормализации и не возвращаются этим методом автоматически. Fetch terminal helpers получают host `operation.id`, callback helpers — provider id: точные production helper signatures должны быть согласованы при подключении хоста. Parsed callback не возвращает отдельный `signature_verification` marker; аутентификация является предусловием host boundary.
+
 Unsupported schema/auth/callback constructs становятся warnings. В Payout Studio они разделены на `reviewable`, `manual_configuration`, `unsupported` и `invalid_spec`; только `reviewable` предлагает override. Для `oneOf` UI объясняет границу поддержки, показывает исходную строку и не обещает исправление через override. Broken, external или cyclic `$ref` завершают parsing предметной ошибкой. Обычный `POST /webhooks/...` остаётся стандартной HTTP operation и уже извлекается.
 
 ## Тесты
@@ -367,4 +375,4 @@ Real-provider snapshots воспроизводятся командой `bundle 
 
 ## Статус
 
-Третий чекпоинт пройден. Актуальная Ruby suite — **149 tests / 887 assertions**, без failures/errors/skips; frontend logic — 7/7. Помимо трёх synthetic demo specs, два официальных real-provider snapshots проходят generation, `ruby -c` и runtime contract tests. Основные документы для проверки кода: [JURY_GUIDE.md](JURY_GUIDE.md), [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md), [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md) и [MODULE_MAP.md](MODULE_MAP.md). Live sandbox calls без credentials не заявляются. Generated RSpec artifact, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.
+Третий чекпоинт пройден. Актуальная Ruby suite — **152 tests / 899 assertions**, без failures/errors/skips; frontend logic — 7/7. Помимо трёх synthetic demo specs, два официальных real-provider snapshots проходят generation, `ruby -c` и runtime contract tests. Основные документы для проверки кода: [JURY_GUIDE.md](JURY_GUIDE.md), [REAL_PROVIDER_EXAMPLES.md](REAL_PROVIDER_EXAMPLES.md), [CRITERION_2_TEST_EVIDENCE.md](CRITERION_2_TEST_EVIDENCE.md) и [MODULE_MAP.md](MODULE_MAP.md). Live sandbox calls без credentials не заявляются. Generated RSpec artifact, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.

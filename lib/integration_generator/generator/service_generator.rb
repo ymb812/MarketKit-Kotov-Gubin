@@ -42,6 +42,7 @@ module IntegrationGenerator
                   "key" => operation["key"],
                   "method" => operation["method"],
                   "path" => operation["path"],
+                  "base_urls" => expanded_base_urls(operation.dig("contract", "servers") || @manifest["servers"]),
                   "response_statuses" => (operation.dig("contract", "responses") || {}).keys
                 }
               }
@@ -99,8 +100,8 @@ module IntegrationGenerator
         end
       end
 
-      def expanded_base_urls
-        @manifest["servers"].map do |server|
+      def expanded_base_urls(servers = @manifest["servers"])
+        servers.map do |server|
           server["url"].to_s.gsub(/\{([^}]+)\}/) do |placeholder|
             server.dig("variables", Regexp.last_match(1), "default") || placeholder
           end
@@ -213,7 +214,7 @@ module IntegrationGenerator
             end
 
             # The host passes parsed JSON after enforcing its inbound authentication policy.
-            # Mapping a payload alone does not authenticate it; the result makes that explicit.
+            # Mapping a payload alone does not authenticate it; authentication is a host precondition.
             def process_callback(payload, headers: nil, raw_body: nil, allow_unverified: false)
               ensure_detected!("webhook")
               webhook = ADAPTER_CONFIG.fetch("webhook")
@@ -271,7 +272,10 @@ module IntegrationGenerator
               definition = capability_operation(intent)
               request = {
                 method: definition.fetch("method").downcase.to_sym,
-                url: build_url(interpolate_path(definition.fetch("path"), intent, operation)),
+                url: build_url(
+                  interpolate_path(definition.fetch("path"), intent, operation, allow_unreviewed: allow_unreviewed),
+                  definition
+                ),
                 headers: {},
                 query: {},
                 body: nil
@@ -338,9 +342,12 @@ module IntegrationGenerator
               end
             end
 
-            def interpolate_path(path, intent, operation)
+            def interpolate_path(path, intent, operation, allow_unreviewed: false)
               mappings = mappings_for(intent).select { |mapping| mapping["location"] == "path" }
               mappings.reduce(path.dup) do |result, mapping|
+                if mapping["requires_review"] && !allow_unreviewed
+                  raise ConfigurationError, "Path mapping #{mapping['target']} requires manifest review"
+                end
                 value = mapping_value(operation, nil, mapping)
                 raise ArgumentError, "Missing value for path parameter #{mapping['target']}" unless present?(value)
 
@@ -504,6 +511,9 @@ module IntegrationGenerator
             end
 
             def apply_operation_status(operation_id, status, rejection_reason = nil)
+              if %i[approved rejected].include?(status) && !present?(operation_id)
+                raise ProviderError, "Terminal provider status requires an operation identifier"
+              end
               case status
               when :approved
                 approve_operation(operation_id)
@@ -665,8 +675,9 @@ module IntegrationGenerator
               ADAPTER_CONFIG.dig("field_mappings", intent, "response") || []
             end
 
-            def build_url(path)
-              base_url = ENV.fetch(ADAPTER_CONFIG.fetch("base_url_env"), ADAPTER_CONFIG.fetch("base_urls").first)
+            def build_url(path, definition)
+              base_urls = definition.fetch("base_urls", ADAPTER_CONFIG.fetch("base_urls"))
+              base_url = ENV.fetch(ADAPTER_CONFIG.fetch("base_url_env"), base_urls.first)
               raise ConfigurationError, "Provider base URL is not declared" unless present?(base_url)
               raise ConfigurationError, "Provider base URL contains unresolved variables" if base_url.match?(/\{[^}]+\}/)
 

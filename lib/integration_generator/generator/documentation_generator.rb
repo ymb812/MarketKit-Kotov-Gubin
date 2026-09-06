@@ -182,6 +182,9 @@ module IntegrationGenerator
           - Provider HTTP errors are converted to platform codes such as `bad_request`, `unauthorized`, `forbidden`, `unprocessable_entity`, `too_many_requests` and `internal_server_error`.
           - `request_method` is the logical gateway/payment method, not an HTTP verb. A reviewed mapping may use it for fields such as recipient type.
           - `build_provider_request` is an inspection/testing boundary that builds but does not send the outbound request.
+          - The provider's `<PROVIDER>_BASE_URL` environment variable overrides the selected operation/path/root server. Server variables use their declared defaults.
+          - Fetch terminal helpers receive the host `operation.id`; callback helpers receive the mapped provider id. Adapt these isolated helper calls to the production host contract.
+          - Provider code/message/Retry-After are extracted internally; public `failure` returns platform code/message only. The host must arrange access to transport details for retry or diagnostics.
         MARKDOWN
       end
 
@@ -219,6 +222,7 @@ module IntegrationGenerator
         end
         lines << ""
         lines << "Unknown provider statuses remain `unknown` and require review."
+        lines << "Default-rule or review-required mappings are proposals only: they do not trigger terminal actions until confirmed by an override."
         lines.join("\n")
       end
 

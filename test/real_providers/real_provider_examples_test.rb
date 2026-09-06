@@ -20,7 +20,7 @@ class RealProviderExamplesTest < Minitest::Test
       commit: "f82d1fe674e536cc2c6b0d7946e0e827873a4fbf",
       source_path: "yaml/TransferService-v4.yaml",
       source_sha256: "4d9803371cda6c5be7ca456e201cb287e7851830ba1d96506224d0542cec59a5",
-      snapshot_sha256: "dd20ad906e0f294e2c5e3980e976db59403a392d7566a825fe10e7ac1338a539",
+      snapshot_sha256: "fda275e9d189087ee8f50b522039c0aade75697ec131d93dda3171949800cb06",
       paths: ["/transfers", "/transfers/{id}"],
       class_name: :AdyenTransferV4Service
     },
@@ -30,7 +30,7 @@ class RealProviderExamplesTest < Minitest::Test
       commit: "a8a09eb98ccf65e4a44481f768ac58cbd6540fa5",
       source_path: "openapi/client-api/latest/airwallex-openapi-latest.json",
       source_sha256: "ee3add01d9e521467b023711f965dc5dba78ee9246f566295725e62fd13629a2",
-      snapshot_sha256: "4ecff63ffd62e37e0a9f3f8f36a73f050c8ccce513e5ec3524f496927086b312",
+      snapshot_sha256: "19440873342ba5437b7774d720ca0ccaa8fe9f206d81cfe9e6d5dbebbd209f7e",
       paths: [
         "/api/v1/transfers/create",
         "/api/v1/transfers/{id}",
