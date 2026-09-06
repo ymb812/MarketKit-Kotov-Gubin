@@ -5,14 +5,12 @@ module IntegrationGenerator
     class FieldMappingAnalyzer
       ROLE_RULES = {
         %w[amount value sum money] => ["amount", "operation.amount", 0.95],
-        %w[currency asset currency_code] => ["currency", "operation.currency", 0.9],
         %w[external_id merchant_reference client_reference] => ["external_id", "operation.id", 0.85],
         %w[recipient destination beneficiary payee] => ["recipient", "operation.payout_requisite", 0.65],
-        %w[phone phone_number] => ["recipient_phone", "operation.payout_requisite.phone", 0.65],
-        %w[bank_code bic bank_id] => ["recipient_bank_code", "operation.payout_requisite.bank_code", 0.6],
-        %w[bank_name] => ["recipient_bank_name", "operation.payout_requisite.bank_name", 0.6],
-        %w[card_number pan] => ["recipient_card", "operation.payout_requisite.card_number", 0.6],
-        %w[iban account_number] => ["recipient_account", "operation.payout_requisite.account", 0.6]
+        %w[phone phone_number] => ["recipient_phone", "operation.payout_requisite.sbp.phone", 0.65],
+        %w[bank_code bic bank_id] => ["recipient_bank_code", "operation.payout_requisite.sbp.bank_code", 0.6],
+        %w[bank_name] => ["recipient_bank_name", "operation.payout_requisite.sbp.bank_name", 0.6],
+        %w[card_number pan] => ["recipient_card", "operation.payout_requisite.card_number", 0.6]
       }.freeze
       ID_PARAMETER_NAMES = %w[
         id payout_id transfer_id transaction_id operation_id withdrawal_id disbursement_id remittance_id
@@ -84,7 +82,7 @@ module IntegrationGenerator
             "role" => "provider_operation_id",
             "target" => parameter["name"],
             "location" => parameter["in"],
-            "source_candidate" => "operation.provider_operation_id",
+            "source_candidate" => "operation.provider_operation_key",
             "required" => parameter["required"],
             "schema" => Support.compact_schema(parameter["schema"]),
             "confidence" => confidence,
@@ -158,20 +156,19 @@ module IntegrationGenerator
           }
         end
 
-        top_level_required = schema.is_a?(Hash) ? schema.fetch("required", []) : []
-        top_level_required.each do |name|
-          next if schema.dig("properties", name, "read_only") == true
-          next if mappings.any? { |mapping| mapping["target"] == name }
+        required.each do |path|
+          child = schema_at_path(schema, path)
+          next if child&.fetch("read_only", false)
+          next if mappings.any? { |mapping| mapping["target"] == path }
 
-          child = schema.dig("properties", name)
           warnings << Support.warning(
             "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND",
-            "Required request body field '#{name}' needs an explicit host operation source",
-            location: "#/field_mappings/create_payout/request/#{name}"
+            "Required request body field '#{path}' needs an explicit reviewed mapping",
+            location: "#/field_mappings/create_payout/request/#{path}"
           )
           mappings << {
             "role" => "unmapped_required",
-            "target" => name,
+            "target" => path,
             "location" => "body",
             "source_candidate" => nil,
             "required" => true,
@@ -183,6 +180,17 @@ module IntegrationGenerator
           }
         end
         mappings
+      end
+
+      def schema_at_path(schema, path)
+        path.to_s.split(".").reduce(schema) do |current, segment|
+          break nil unless current.is_a?(Hash)
+
+          name = segment.delete_suffix("[]")
+          child = current.dig("properties", name)
+          child = child["items"] if segment.end_with?("[]") && child.is_a?(Hash)
+          child
+        end
       end
 
       def parameter_mappings(operation, warnings)
@@ -198,13 +206,13 @@ module IntegrationGenerator
               "role" => "idempotency_key",
               "target" => parameter["name"],
               "location" => parameter["in"],
-              "source_candidate" => "operation.idempotency_key",
+              "source_candidate" => "operation.id",
               "required" => parameter["required"],
               "schema" => Support.compact_schema(parameter["schema"]),
               "confidence" => 0.7,
               "provenance" => "inferred",
               "requires_review" => true,
-              "evidence" => "parameter name has idempotency semantics; host field is a candidate"
+              "evidence" => "parameter name has idempotency semantics; stable operation.id is the host candidate"
             }
           else
             warnings << Support.warning(

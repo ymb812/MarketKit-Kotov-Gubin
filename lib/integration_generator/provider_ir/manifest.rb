@@ -192,6 +192,17 @@ module IntegrationGenerator
           ensure_type!(mapping["response"], Array, "field_mappings.#{intent}.response")
           mapping["request"].each_with_index do |field, index|
             ensure_type!(field, Hash, "field_mappings.#{intent}.request.#{index}")
+            ensure_non_empty_string!(field["target"], "field_mappings.#{intent}.request.#{index}.target")
+            ensure_non_empty_string!(field["location"], "field_mappings.#{intent}.request.#{index}.location")
+            if field["source_candidate"] && !valid_mapping_source?(field["source_candidate"])
+              raise ArgumentError, "Manifest field_mappings.#{intent}.request.#{index}.source_candidate is invalid"
+            end
+            if field["source_candidate"] && field.key?("constant_value")
+              raise ArgumentError, "Manifest field_mappings.#{intent}.request.#{index} cannot contain both source_candidate and constant_value"
+            end
+            if field.key?("constant_value") && !scalar?(field["constant_value"])
+              raise ArgumentError, "Manifest field_mappings.#{intent}.request.#{index}.constant_value must be scalar"
+            end
           end
           mapping["response"].each_with_index do |field, index|
             ensure_type!(field, Hash, "field_mappings.#{intent}.response.#{index}")
@@ -310,6 +321,15 @@ module IntegrationGenerator
         return if value.is_a?(String) && !value.empty?
 
         raise ArgumentError, "Manifest #{name} must be a non-empty string"
+      end
+
+      def valid_mapping_source?(value)
+        value == "request_method" ||
+          (value.is_a?(String) && value.match?(/\Aoperation(?:\.[a-zA-Z0-9_]+)+\z/))
+      end
+
+      def scalar?(value)
+        value.nil? || value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false
       end
 
       def serialize(value)

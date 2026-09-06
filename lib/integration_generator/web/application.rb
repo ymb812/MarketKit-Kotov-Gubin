@@ -8,6 +8,7 @@ require "stringio"
 require "tempfile"
 require "zlib"
 require "rubygems/package"
+require_relative "../diagnostic_remediation"
 
 module IntegrationGenerator
   module Web
@@ -83,9 +84,12 @@ module IntegrationGenerator
       def response_for(inferred, final)
         final_hash = final.to_h
         compatibility = IntegrationGenerator::Generator::CompatibilityGenerator.new(final)
+        diagnostics = IntegrationGenerator::DiagnosticRemediation.decorate(final_hash.fetch("warnings"))
         {
           "manifest" => final_hash,
           "inferred_manifest" => inferred.to_h,
+          "diagnostics" => diagnostics,
+          "diagnostic_summary" => IntegrationGenerator::DiagnosticRemediation.summary(diagnostics),
           "overall_status" => compatibility.overall_status,
           "compatibility_report" => compatibility.render
         }

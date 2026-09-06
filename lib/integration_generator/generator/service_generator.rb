@@ -87,7 +87,10 @@ module IntegrationGenerator
         @manifest["field_mappings"].transform_values do |mapping|
           {
             "request" => mapping.fetch("request", []).map do |field|
-              field.slice("role", "target", "location", "source_candidate", "required", "requires_review", "schema")
+              field.slice(
+                "role", "target", "location", "source_candidate", "constant_value",
+                "required", "requires_review", "schema"
+              )
             end,
             "response" => mapping.fetch("response", []).map do |field|
               field.slice("role", "source", "http_status")
@@ -137,55 +140,76 @@ module IntegrationGenerator
 
             attr_writer :provider_client
 
-            def check_conditions(operation, request_method)
-              _logical_gateway_method = request_method
-              required_mapping_errors = mappings_for("create_payout").filter_map do |mapping|
-                next unless mapping["required"]
-                value = read_operation_path(operation, mapping["source_candidate"])
-                next if present?(value) || nullable_body_value?(operation, mapping, value)
+            def check_conditions(operation, request_method = nil)
+              errors = condition_errors(operation, request_method)
+              return success if errors.empty?
 
-                {
-                  code: "required_field_missing",
-                  field: mapping["source_candidate"] || mapping["target"],
-                  message: "Required provider field #{mapping['target']} has no mapped operation value"
-                }
-              end
-              required_mapping_errors + conditional_requirement_errors(operation)
+              failure(:bad_request, errors.map { |error| error.fetch(:message) }.join("; "))
             end
 
             def create_request(operation, request_method: nil, allow_unreviewed: false)
               ensure_detected!("create_payout")
-              errors = check_conditions(operation, request_method)
-              unless errors.empty?
-                raise ArgumentError, errors.map { |error| error.fetch(:message) }.join("; ")
-              end
+              errors = condition_errors(operation, request_method)
+              return failure(:bad_request, errors.map { |error| error.fetch(:message) }.join("; ")) unless errors.empty?
 
-              build_request("create_payout", operation, allow_unreviewed: allow_unreviewed)
+              response = dispatch(
+                build_request(
+                  "create_payout", operation, request_method: request_method,
+                  allow_unreviewed: allow_unreviewed
+                )
+              )
+              normalized = normalize_response(response, "create_payout")
+              return provider_failure(normalized) unless normalized[:success]
+
+              provider_id = normalized[:provider_operation_id]
+              return failure(:internal_server_error, "operation.provider_response_invalid") unless present?(provider_id)
+
+              success(result: { id: provider_id })
             end
 
             def create_payout(operation, request_method: nil, allow_unreviewed: false)
-              response = dispatch(
-                create_request(operation, request_method: request_method, allow_unreviewed: allow_unreviewed)
+              create_request(operation, request_method: request_method, allow_unreviewed: allow_unreviewed)
+            end
+
+            # Review/debug boundary: returns the provider request without sending it.
+            def build_provider_request(operation, request_method: nil, allow_unreviewed: false)
+              ensure_detected!("create_payout")
+              errors = condition_errors(operation, request_method)
+              raise ArgumentError, errors.map { |error| error.fetch(:message) }.join("; ") unless errors.empty?
+
+              build_request(
+                "create_payout", operation, request_method: request_method,
+                allow_unreviewed: allow_unreviewed
               )
-              normalize_response(response, "create_payout")
             end
 
             def fetch_status(operation, allow_unreviewed: false)
               ensure_detected!("fetch_status")
-              response = dispatch(build_request("fetch_status", operation, allow_unreviewed: allow_unreviewed))
-              normalize_response(response, "fetch_status")
+              response = dispatch(
+                build_request("fetch_status", operation, request_method: nil, allow_unreviewed: allow_unreviewed)
+              )
+              normalized = normalize_response(response, "fetch_status")
+              return provider_failure(normalized) unless normalized[:success]
+
+              apply_operation_status(
+                read_operation_path(operation, "operation.id"), normalized[:status], normalized[:provider_code]
+              )
             end
 
             def cancel_payout(operation, allow_unreviewed: false)
               ensure_detected!("cancel_payout")
-              response = dispatch(build_request("cancel_payout", operation, allow_unreviewed: allow_unreviewed))
-              normalize_response(response, "cancel_payout")
+              response = dispatch(
+                build_request("cancel_payout", operation, request_method: nil, allow_unreviewed: allow_unreviewed)
+              )
+              normalized = normalize_response(response, "cancel_payout")
+              normalized[:success] ? success : provider_failure(normalized)
             end
 
             def fetch_balance
               ensure_detected!("balance")
-              response = dispatch(build_request("balance", nil, allow_unreviewed: false))
-              normalize_response(response, "balance")
+              response = dispatch(build_request("balance", nil, request_method: nil, allow_unreviewed: false))
+              normalized = normalize_response(response, "balance")
+              normalized[:success] ? success(result: normalized[:raw]) : provider_failure(normalized)
             end
 
             # The host passes parsed JSON after enforcing its inbound authentication policy.
@@ -212,7 +236,7 @@ module IntegrationGenerator
               end
               provider_status = read_payload_path(body, paths["status_path"])
 
-              {
+              result = {
                 event: read_payload_path(body, paths["event_path"]),
                 provider_operation_id: read_payload_path(body, paths["provider_operation_id_path"]),
                 external_id: read_payload_path(body, paths["external_id_path"]),
@@ -222,6 +246,7 @@ module IntegrationGenerator
                 signature_verification: verification,
                 raw: body
               }
+              apply_operation_status(result[:provider_operation_id], result[:status], result[:error])
             end
 
             # Use at the HTTP boundary where the original signed bytes are available.
@@ -242,7 +267,7 @@ module IntegrationGenerator
               provider_client.call(**request)
             end
 
-            def build_request(intent, operation, allow_unreviewed:)
+            def build_request(intent, operation, request_method:, allow_unreviewed:)
               definition = capability_operation(intent)
               request = {
                 method: definition.fetch("method").downcase.to_sym,
@@ -265,14 +290,14 @@ module IntegrationGenerator
                 next if location == "path"
 
                 source = mapping["source_candidate"]
-                if source.nil?
+                unless source || mapping.key?("constant_value")
                   if mapping["required"]
                     raise ConfigurationError, "Manual mapping required for #{location} parameter #{mapping['target']}"
                   end
                   next
                 end
 
-                value = read_operation_path(operation, source)
+                value = mapping_value(operation, request_method, mapping)
                 if value.nil?
                   if mapping["required"] && !nullable_body_value?(operation, mapping, value)
                     raise ArgumentError, "Required provider field #{mapping['target']} is missing"
@@ -301,7 +326,7 @@ module IntegrationGenerator
             def interpolate_path(path, intent, operation)
               mappings = mappings_for(intent).select { |mapping| mapping["location"] == "path" }
               mappings.reduce(path.dup) do |result, mapping|
-                value = read_operation_path(operation, mapping["source_candidate"])
+                value = mapping_value(operation, nil, mapping)
                 raise ArgumentError, "Missing value for path parameter #{mapping['target']}" unless present?(value)
 
                 encoded = URI.encode_www_form_component(value.to_s).gsub("+", "%20")
@@ -434,6 +459,46 @@ module IntegrationGenerator
               }
             end
 
+            def provider_failure(result)
+              code = result[:provider_code].to_s
+              if code == "amount_limit_exceeded"
+                return failure(:unprocessable_entity, "operation.amount_limit_exceeded")
+              end
+
+              failure(platform_failure_code(result[:http_status]), platform_failure_message(result[:http_status]))
+            end
+
+            def platform_failure_code(http_status)
+              case http_status.to_i
+              when 400 then :bad_request
+              when 401 then :unauthorized
+              when 403 then :forbidden
+              when 422 then :unprocessable_entity
+              when 429 then :too_many_requests
+              when 400..499 then :unprocessable_entity
+              else :internal_server_error
+              end
+            end
+
+            def platform_failure_message(http_status)
+              case http_status.to_i
+              when 401 then "provider.invalid_credentials"
+              when 429 then "provider.rate_limit"
+              else "operation.provider_error"
+              end
+            end
+
+            def apply_operation_status(operation_id, status, rejection_reason = nil)
+              case status
+              when :approved
+                approve_operation(operation_id)
+              when :rejected
+                reject_operation(operation_id, rejection_reason || "operation.provider_error")
+              else
+                success
+              end
+            end
+
             def normalize_status(value)
               return :unknown if value.nil?
 
@@ -488,7 +553,23 @@ module IntegrationGenerator
               ADAPTER_CONFIG.dig("field_mappings", intent, "request") || []
             end
 
-            def conditional_requirement_errors(operation)
+            def condition_errors(operation, request_method)
+              required_mapping_errors = mappings_for("create_payout").filter_map do |mapping|
+                next unless mapping["required"]
+
+                value = mapping_value(operation, request_method, mapping)
+                next if present?(value) || nullable_body_value?(operation, mapping, value)
+
+                {
+                  code: "required_field_missing",
+                  field: mapping["source_candidate"] || mapping["target"],
+                  message: "Required provider field #{mapping['target']} has no mapped operation value"
+                }
+              end
+              required_mapping_errors + conditional_requirement_errors(operation, request_method)
+            end
+
+            def conditional_requirement_errors(operation, request_method)
               conditional_requirements.filter_map do |requirement|
                 # Text-derived rules remain review-only until an override confirms them.
                 next if requirement["requires_review"]
@@ -497,21 +578,21 @@ module IntegrationGenerator
                 condition = requirement["required_if"] || {}
                 condition_field = condition["field"]
                 expected = condition["equals"]
-                condition_source = confirmed_source_for_provider_field(condition_field)
-                required_source = confirmed_source_for_provider_field(field)
+                condition_mapping = confirmed_mapping_for_provider_field(condition_field)
+                required_mapping = confirmed_mapping_for_provider_field(field)
 
-                unless condition_source && required_source
+                unless condition_mapping && required_mapping
                   raise ConfigurationError,
-                        "Conditional requirement for #{field} needs confirmed field mappings with source candidates"
+                        "Conditional requirement for #{field} needs confirmed field mappings"
                 end
 
-                actual = read_operation_path(operation, condition_source)
+                actual = provider_field_value(operation, request_method, condition_field, condition_mapping)
                 next unless values_equal?(actual, expected)
-                next if present?(read_operation_path(operation, required_source))
+                next if present?(provider_field_value(operation, request_method, field, required_mapping))
 
                 {
                   code: "conditional_required_field_missing",
-                  field: required_source,
+                  field: required_mapping["source_candidate"] || field,
                   message: "Provider field #{field} is required when #{condition_field} equals #{expected.inspect}"
                 }
               end
@@ -521,29 +602,44 @@ module IntegrationGenerator
               ADAPTER_CONFIG.dig("transformations", "conditional_requirements") || []
             end
 
-            def confirmed_source_for_provider_field(provider_field)
+            def confirmed_mapping_for_provider_field(provider_field)
               mappings = mappings_for("create_payout")
               direct = mappings.find { |mapping| mapping["target"] == provider_field }
-              return mapping_source(direct) if direct
+              return direct if mapping_confirmed?(direct)
 
               parent = mappings.select do |mapping|
                 target = mapping["target"].to_s
                 provider_field.to_s.start_with?("#{target}.")
               end.max_by { |mapping| mapping["target"].to_s.length }
-              return nil unless parent
-
-              source = mapping_source(parent)
-              return nil unless source
-
-              suffix = provider_field.to_s.delete_prefix("#{parent['target']}.")
-              "#{source}.#{suffix}"
+              mapping_confirmed?(parent) ? parent : nil
             end
 
-            def mapping_source(mapping)
-              return nil unless mapping && !mapping["requires_review"]
+            def mapping_confirmed?(mapping)
+              mapping && !mapping["requires_review"] &&
+                (present?(mapping["source_candidate"]) || mapping.key?("constant_value"))
+            end
+
+            def provider_field_value(operation, request_method, provider_field, mapping)
+              value = mapping_value(operation, request_method, mapping)
+              suffix = provider_field.to_s.delete_prefix(mapping["target"].to_s).delete_prefix(".")
+              suffix.empty? ? value : read_value_path(value, suffix)
+            end
+
+            def mapping_value(operation, request_method, mapping)
+              return mapping["constant_value"] if mapping.key?("constant_value")
 
               source = mapping["source_candidate"]
-              present?(source) ? source : nil
+              return (request_method || inferred_request_method(operation))&.to_s if source == "request_method"
+
+              read_operation_path(operation, source)
+            end
+
+            def inferred_request_method(operation)
+              requisites = read_operation_path(operation, "operation.payout_requisite")
+              return :sbp if requisites.is_a?(Hash) && (requisites.key?("sbp") || requisites.key?(:sbp))
+              return :card if requisites.is_a?(Hash) && (requisites.key?("card_number") || requisites.key?(:card_number))
+
+              nil
             end
 
             def values_equal?(actual, expected)
@@ -571,8 +667,10 @@ module IntegrationGenerator
 
             def nullable_body_value?(operation, mapping, value)
               return false unless value.nil? && (mapping["location"] || "body") == "body" && mapping.dig("schema", "nullable")
+              return true if mapping.key?("constant_value")
+
               source = mapping["source_candidate"]
-              return false if source.nil?
+              return false if source.nil? || source == "request_method"
 
               current = operation
               source.to_s.sub(/\Aoperation\./, "").split(".").each do |segment|

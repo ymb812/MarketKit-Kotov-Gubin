@@ -27,6 +27,8 @@ class WebApplicationTest < Minitest::Test
     assert_equal false, result.dig("inferred_manifest", "overrides", "applied")
     assert_equal true, result.dig("manifest", "overrides", "applied")
     assert_equal "needs_review", result.fetch("overall_status")
+    assert_equal 1, result.dig("diagnostic_summary", "manual_configuration")
+    assert_equal "manual_configuration", result.fetch("diagnostics").first.fetch("kind")
     assert_includes result.fetch("compatibility_report"), "# NovaPay Payout API compatibility report"
   end
 
@@ -76,6 +78,24 @@ class WebApplicationTest < Minitest::Test
       end
       assert_equal "WEB_INVALID_REQUEST", error.code
     end
+  end
+
+  def test_one_of_warning_exposes_source_remediation_without_override_claim
+    source = YAML.safe_load(File.read(example_path("provider_api.yaml")), aliases: false)
+    source.dig("components", "schemas", "CreatePayoutRequest", "properties", "amount")["oneOf"] = [
+      { "type" => "integer" }, { "type" => "string" }
+    ]
+    input = input_for("provider_api.yaml", nil).merge("specification" => YAML.dump(source))
+
+    result = app_for.analyze(input)
+    schema_diagnostics = result.fetch("diagnostics").select { |item| item["code"] == "UNSUPPORTED_SCHEMA_KEYWORD" }
+    diagnostic = schema_diagnostics.first
+
+    assert_equal 1, schema_diagnostics.length
+    assert_equal "unsupported", diagnostic["kind"]
+    assert_equal false, diagnostic["override_supported"]
+    assert_equal "specification", diagnostic.dig("target", "focus")
+    assert_match(%r{/oneOf\z}, diagnostic["source_location"])
   end
 
   private

@@ -11,16 +11,19 @@ class ArtifactBundleTest < Minitest::Test
     assert_includes artifacts["novapay_service.rb"], '"path": "/payouts"'
     assert_includes artifacts["novapay_service.rb"], '"parameter_name": "X-API-Key"'
     assert_includes artifacts["INTEGRATION.md"], "## Status mapping"
+    assert_includes artifacts["INTEGRATION.md"], "success(result: { id: provider_id })"
+    assert_includes artifacts["INTEGRATION.md"], "operation.provider_operation_key"
     assert_includes artifacts["INTEGRATION.md"], "WEBHOOK_SIGNATURE_ENCODING_UNKNOWN"
     assert_includes artifacts["compatibility_report.md"], "# NovaPay Payout API compatibility report"
 
     fixtures = JSON.parse(artifacts["fixtures.json"])
     assert_equal "sbp_payout", fixtures.dig("fixtures", "create_payout", "request", "example_name")
-    assert_equal "00000000-0000-4000-8000-000000000000", fixtures.dig("fixtures", "create_payout", "request", "parameters", "Idempotency-Key")
-    assert_equal "schema_generated", fixtures.dig("fixtures", "create_payout", "request", "parameter_provenance", "Idempotency-Key")
+    assert_equal "op_abc123", fixtures.dig("fixtures", "create_payout", "request", "parameters", "Idempotency-Key")
+    assert_equal "openapi_example", fixtures.dig("fixtures", "create_payout", "request", "parameter_provenance", "Idempotency-Key")
     assert_equal "422", fixtures.dig("fixtures", "create_payout", "error_response", "http_status")
     assert_nil fixtures.dig("fixtures", "create_payout", "success_response", "expected", "normalized_status")
     assert_equal 2, fixtures.dig("fixtures", "webhook", "callbacks").length
+    assert_equal "no_status_change", fixtures.dig("fixtures", "webhook", "callbacks", 0, "expected", "platform_action")
     assert_equal "np_7f3a9b2c", fixtures.dig("fixtures", "fetch_status", "request", "parameters", "payout_id")
     assert_equal "openapi_example", fixtures.dig("fixtures", "fetch_status", "request", "parameter_provenance", "payout_id")
     assert_equal "schema_shape_only", fixtures.dig("fixtures", "cancel_payout", "success_response", "scenario")

@@ -22,23 +22,31 @@ field_mappings:
         confirm: true
       - target: recipient.phone
         location: body
-        source: operation.payout_requisite.phone
+        source: operation.payout_requisite.sbp.phone
         confirm: true
       - target: recipient.bank_code
         location: body
-        source: operation.payout_requisite.bank_code
+        source: operation.payout_requisite.sbp.bank_code
         confirm: true
       - target: recipient.bank_name
         location: body
-        source: operation.payout_requisite.bank_name
+        source: operation.payout_requisite.sbp.bank_name
         confirm: true
       - target: recipient.card_number
         location: body
         source: operation.payout_requisite.card_number
         confirm: true
+      - target: recipient.type
+        location: body
+        source: request_method
+        confirm: true
+      - target: currency
+        location: body
+        value: RUB
+        confirm: true
       - target: Idempotency-Key
         location: header
-        source: operation.idempotency_key
+        source: operation.id
         confirm: true
 
 transformations:
@@ -68,6 +76,10 @@ resolve_warnings:
     location: "#/webhook/signature/encoding"
   - code: IDEMPOTENCY_SOURCE_REQUIRES_REVIEW
     location: "#/field_mappings/create_payout/request/Idempotency-Key"
+  - code: REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND
+    location: "#/field_mappings/create_payout/request/recipient.type"
+  - code: REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND
+    location: "#/field_mappings/create_payout/request/currency"
   - code: CONDITIONAL_REQUIREMENT_INFERRED
     location: "#/transformations/conditional_requirements/recipient.bank_code"
   - code: CONDITIONAL_REQUIREMENT_INFERRED

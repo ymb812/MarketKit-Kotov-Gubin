@@ -44,7 +44,7 @@ module IntegrationGenerator
           security_schemes: security_schemes,
           schemas: parse_component_schemas(resolved.dig("components", "schemas")),
           operations: parse_operations(resolved.fetch("paths")),
-          warnings: @warnings,
+          warnings: @warnings.uniq { |warning| [warning.code, warning.message, warning.location] },
           source: @source
         )
       end

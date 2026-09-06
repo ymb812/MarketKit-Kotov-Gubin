@@ -21,7 +21,9 @@ class OverridesApplierTest < Minitest::Test
     assert_equal "overridden", final.dig("webhook", "signature", "provenance")
     assert_equal "overridden", final.dig("status_mapping", "mappings", "completed", "provenance")
     assert_equal false, mapping(final, "Idempotency-Key", "header")["requires_review"]
-    assert_equal "operation.idempotency_key", mapping(final, "Idempotency-Key", "header")["source_candidate"]
+    assert_equal "operation.id", mapping(final, "Idempotency-Key", "header")["source_candidate"]
+    assert_equal "request_method", mapping(final, "recipient.type", "body")["source_candidate"]
+    assert_equal "RUB", mapping(final, "currency", "body")["constant_value"]
     assert final.dig("transformations", "conditional_requirements").all? { |rule| rule["provenance"] == "overridden" }
 
     unresolved_codes = final.fetch("warnings").map { |warning| warning["code"] }
@@ -43,6 +45,12 @@ class OverridesApplierTest < Minitest::Test
         "OVERRIDE_UNKNOWN_FIELD"
       ],
       [{ "webhook" => { "signature" => { "encoding" => "rot13" } } }, "OVERRIDE_INVALID_VALUE"],
+      [
+        { "field_mappings" => { "create_payout" => { "request" => [
+          { "target" => "currency", "location" => "body", "source" => "operation.currency", "value" => "RUB", "confirm" => true }
+        ] } } },
+        "OVERRIDE_INVALID_VALUE"
+      ],
       [{ "operations" => {} }, "OVERRIDE_INVALID_VALUE"],
       [
         {

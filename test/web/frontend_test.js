@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { reviewSummary, renderWarnings, readableMarkdown } = require("../../web/app.js");
+const { reviewSummary, renderWarnings, readableMarkdown, locateSourceRange } = require("../../web/app.js");
 
 test("applying a partial override never completes review, including readiness without warnings", () => {
   const result = {
@@ -14,7 +14,7 @@ test("applying a partial override never completes review, including readiness wi
   assert.match(reviewSummary(result).text, /предупреждений: 9/);
   result.manifest.warnings = [];
   assert.equal(reviewSummary(result).ready, false);
-  assert.match(reviewSummary(result).text, /ограничениями/);
+  assert.match(reviewSummary(result).text, /отчёт совместимости/);
 });
 
 test("secret-only configuration stays distinct from other unresolved decisions", () => {
@@ -34,6 +34,34 @@ test("unknown diagnostics retain code/message/location and escape uploaded text"
   assert.match(html, /#\/new\/field/);
   assert.match(html, /&lt;img/);
   assert.doesNotMatch(html, /<img/);
+  assert.doesNotMatch(html, /data-diagnostic-view/);
+});
+
+test("unsupported oneOf explains the limitation and points to its unique source line", () => {
+  const source = "components:\n  schemas:\n    Recipient:\n      oneOf:\n        - type: object\n";
+  const html = renderWarnings([{
+    code: "UNSUPPORTED_SCHEMA_KEYWORD", message: "oneOf is not normalized", kind: "unsupported",
+    title: "Конструкция схемы пока не поддерживается", guidance: "Override не добавит поддержку.",
+    location: "#/components/schemas/Recipient/oneOf", source_location: "#/components/schemas/Recipient/oneOf",
+    target: { view: "source", focus: "specification", label: "Показать в OpenAPI" }
+  }], source);
+
+  assert.match(html, /Строка 4/);
+  assert.match(html, /oneOf:/);
+  assert.match(html, /Показать в OpenAPI/);
+  assert.doesNotMatch(html, /Открыть overrides/);
+});
+
+test("source locator refuses an ambiguous token and accepts explicit line positions", () => {
+  assert.equal(locateSourceRange("oneOf:\n  oneOf:\n", "#/oneOf"), null);
+  assert.equal(locateSourceRange("first\nsecond\n", "line 2 column 1").text, "second");
+});
+
+test("source locator finds a unique broken ref by its exact target", () => {
+  const source = "schema:\n  $ref: '#/components/schemas/MissingRequest'\n";
+  const range = locateSourceRange(source, "#/components/schemas/MissingRequest");
+  assert.equal(range.line, 2);
+  assert.equal(range.text, "  $ref: '#/components/schemas/MissingRequest'");
 });
 
 test("readable reports show tables and code without executing provider-supplied HTML", () => {

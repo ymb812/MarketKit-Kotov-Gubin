@@ -5,6 +5,8 @@ require "uri"
 module IntegrationGenerator
   module OpenAPI
     class RefResolver
+      SOURCE_LOCATION_EXTENSION = "x-integration-generator-source-location"
+
       def initialize(document)
         @document = document
       end
@@ -44,13 +46,21 @@ module IntegrationGenerator
         target = lookup(reference)
         resolved_target = resolve(target, location: reference, stack: stack + [reference])
         siblings = value.reject { |key, _| key == "$ref" }
-        return resolved_target if siblings.empty?
+        if siblings.empty?
+          return resolved_target unless resolved_target.is_a?(Hash)
+
+          return resolved_target.merge(
+            SOURCE_LOCATION_EXTENSION => resolved_target[SOURCE_LOCATION_EXTENSION] || reference
+          )
+        end
 
         unless resolved_target.is_a?(Hash)
           raise Error.new("SPEC_INVALID", "A reference with sibling fields must resolve to an object", location: location)
         end
 
-        resolved_target.merge(resolve_regular_hash(siblings, location:, stack: stack))
+        resolved_target
+          .reject { |key, _| key == SOURCE_LOCATION_EXTENSION }
+          .merge(resolve_regular_hash(siblings, location:, stack: stack))
       end
 
       def resolve_regular_hash(value, location:, stack:)

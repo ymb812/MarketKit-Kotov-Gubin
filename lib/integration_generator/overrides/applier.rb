@@ -12,7 +12,7 @@ module IntegrationGenerator
       AMOUNT_KEYS = %w[provider_unit direction factor].freeze
       TRANSFORMATION_KEYS = %w[amount conditional_requirements].freeze
       FIELD_MAPPING_KEYS = %w[request].freeze
-      REQUEST_MAPPING_KEYS = %w[target location source confirm].freeze
+      REQUEST_MAPPING_KEYS = %w[target location source value confirm].freeze
       CONDITION_KEYS = %w[field required_if].freeze
       REQUIRED_IF_KEYS = %w[field equals].freeze
       WEBHOOK_KEYS = %w[signature payload].freeze
@@ -210,8 +210,11 @@ module IntegrationGenerator
         override = expect_hash!(override, "request mapping override", override_path)
         reject_unknown_keys!(override, REQUEST_MAPPING_KEYS, override_path)
         require_keys!(override, %w[target location], override_path)
-        unless override.key?("source") || override.key?("confirm")
-          invalid_value!("Request mapping must provide source and/or confirm", override_path)
+        unless override.key?("source") || override.key?("value") || override.key?("confirm")
+          invalid_value!("Request mapping must provide source, value and/or confirm", override_path)
+        end
+        if override.key?("source") && override.key?("value")
+          invalid_value!("Request mapping cannot provide both source and value", override_path)
         end
 
         target = override["target"]
@@ -229,17 +232,26 @@ module IntegrationGenerator
 
         if override.key?("source")
           source = override["source"]
-          unless source.is_a?(String) && source.match?(/\Aoperation(?:\.[a-zA-Z0-9_]+)+\z/)
-            invalid_value!("Field mapping source must be an explicit operation.* host path", "#{override_path}/source")
+          unless source == "request_method" || (source.is_a?(String) && source.match?(/\Aoperation(?:\.[a-zA-Z0-9_]+)+\z/))
+            invalid_value!("Field mapping source must be request_method or an explicit operation.* host path", "#{override_path}/source")
           end
+        end
+        if override.key?("value") && !scalar?(override["value"])
+          invalid_value!("Field mapping value must be a scalar constant", "#{override_path}/value")
         end
         if override.key?("confirm") && override["confirm"] != true
           invalid_value!("confirm must be true when provided", "#{override_path}/confirm")
         end
 
-        audit_keys = %w[source_candidate requires_review confidence provenance]
+        audit_keys = %w[source_candidate constant_value requires_review confidence provenance]
         before = mapping.slice(*audit_keys)
-        mapping["source_candidate"] = override["source"] if override.key?("source")
+        if override.key?("source")
+          mapping["source_candidate"] = override["source"]
+          mapping.delete("constant_value")
+        elsif override.key?("value")
+          mapping["source_candidate"] = nil
+          mapping["constant_value"] = deep_copy(override["value"])
+        end
         mapping["requires_review"] = false if override["confirm"]
         mapping["confidence"] = 1.0 if override["confirm"]
         mapping["evidence"] = override_reason
@@ -504,10 +516,14 @@ module IntegrationGenerator
           target = candidate["target"].to_s
           provider_field == target || provider_field.start_with?("#{target}.")
         end.max_by { |candidate| candidate["target"].to_s.length }
-        return nil unless mapping && !mapping["requires_review"] && mapping["source_candidate"]
+        return nil unless mapping && !mapping["requires_review"]
 
         suffix = provider_field.delete_prefix(mapping["target"].to_s).delete_prefix(".")
-        [mapping["source_candidate"], suffix.empty? ? nil : suffix].compact.join(".")
+        source = mapping["source_candidate"]
+        return [source, suffix.empty? ? nil : suffix].compact.join(".") if source
+        return "constant" if suffix.empty? && mapping.key?("constant_value")
+
+        nil
       end
 
       def mark_overridden!(value)
@@ -589,7 +605,8 @@ module IntegrationGenerator
         mapping = @attributes.dig("field_mappings", capability, "request")&.find do |candidate|
           candidate["target"] == target
         end
-        mapping && mapping["requires_review"] == false && !mapping["source_candidate"].nil?
+        mapping && mapping["requires_review"] == false &&
+          (!mapping["source_candidate"].nil? || mapping.key?("constant_value"))
       end
 
       def normalized_warning_path(path)

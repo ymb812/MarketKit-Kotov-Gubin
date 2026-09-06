@@ -2,6 +2,7 @@
 
 require_relative "integration_generator/version"
 require_relative "integration_generator/errors"
+require_relative "integration_generator/diagnostic_remediation"
 require_relative "integration_generator/ir/document"
 require_relative "integration_generator/ir/operation"
 require_relative "integration_generator/ir/schema"

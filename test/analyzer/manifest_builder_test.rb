@@ -56,11 +56,12 @@ class ManifestBuilderTest < Minitest::Test
     end
     assert_equal "Idempotency-Key", idempotency["target"]
     assert_equal "header", idempotency["location"]
-    assert_equal "operation.idempotency_key", idempotency["source_candidate"]
+    assert_equal "operation.id", idempotency["source_candidate"]
     assert_equal true, idempotency["requires_review"]
     assert_includes warning_codes(manifest), "IDEMPOTENCY_SOURCE_REQUIRES_REVIEW"
     assert_equal "payout_id", manifest.dig("field_mappings", "fetch_status", "request", 0, "target")
     assert_equal "path", manifest.dig("field_mappings", "fetch_status", "request", 0, "location")
+    assert_equal "operation.provider_operation_key", manifest.dig("field_mappings", "fetch_status", "request", 0, "source_candidate")
     assert_equal "payout_id", manifest.dig("field_mappings", "cancel_payout", "request", 0, "target")
     assert_equal 2, manifest.dig("transformations", "conditional_requirements").length
     assert_includes warning_codes(manifest), "WEBHOOK_SIGNATURE_ENCODING_UNKNOWN"

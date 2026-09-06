@@ -96,6 +96,45 @@ class ParserTest < Minitest::Test
     assert_equal %w[UNSUPPORTED_AUTH UNSUPPORTED_SCHEMA_KEYWORD], ir["warnings"].map { |warning| warning["code"] }
   end
 
+  def test_referenced_schema_warning_keeps_component_location_without_duplicates
+    source = {
+      "openapi" => "3.0.3",
+      "info" => {},
+      "paths" => {
+        "/payouts" => {
+          "post" => {
+            "requestBody" => {
+              "content" => {
+                "application/json" => {
+                  "schema" => { "$ref" => "#/components/schemas/PayoutRequest" }
+                }
+              }
+            },
+            "responses" => { "200" => { "description" => "ok" } }
+          }
+        }
+      },
+      "components" => {
+        "schemas" => {
+          "PayoutRequest" => {
+            "type" => "object",
+            "properties" => {
+              "recipient" => {
+                "oneOf" => [{ "type" => "string" }, { "type" => "object" }]
+              }
+            }
+          }
+        }
+      }
+    }
+
+    warnings = IntegrationGenerator::OpenAPI::Parser.new(source).parse.to_h.fetch("warnings")
+
+    assert_equal 1, warnings.length
+    assert_equal "UNSUPPORTED_SCHEMA_KEYWORD", warnings.first.fetch("code")
+    assert_equal "#/components/schemas/PayoutRequest/properties/recipient/oneOf", warnings.first.fetch("location")
+  end
+
   def test_callbacks_and_top_level_webhooks_are_reported_as_unsupported
     source = {
       "openapi" => "3.1.0",

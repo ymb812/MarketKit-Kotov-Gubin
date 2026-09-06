@@ -67,6 +67,17 @@ class RuntimeValidationTest < Minitest::Test
     assert_match(/Duplicate manifest auth schemes/, error.message)
   end
 
+  def test_loader_rejects_request_mapping_with_source_and_constant
+    manifest = canonical_manifest
+    mapping = manifest.dig("field_mappings", "create_payout", "request").first
+    mapping["constant_value"] = "RUB"
+
+    error = load_error(manifest)
+
+    assert_equal "MANIFEST_INVALID", error.code
+    assert_match(/cannot contain both source_candidate and constant_value/, error.message)
+  end
+
   private
 
   def canonical_manifest

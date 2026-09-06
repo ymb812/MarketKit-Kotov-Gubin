@@ -46,14 +46,15 @@ class AltWithdrawalServiceContractTest < Minitest::Test
     result = service.create_payout(
       {
         "amount" => "42.50",
+        "id" => "idem_1",
         "currency" => "EUR",
-        "idempotency_key" => "idem_1",
         "payout_requisite" => {
           "type" => "iban",
           "account" => "DE89370400440532013000",
           "internal_only" => "must-not-leak"
         }
-      }
+      },
+      request_method: :iban
     )
     request = client.requests.fetch(0)
 
@@ -65,8 +66,7 @@ class AltWithdrawalServiceContractTest < Minitest::Test
       { "type" => "iban", "iban" => "DE89370400440532013000" },
       request.dig(:body, "beneficiary")
     )
-    assert_equal "wd_123", result[:provider_operation_id]
-    assert_equal :in_progress, result[:status]
+    assert_equal "wd_123", result.dig(:result, :id)
   end
 
   def test_overridden_webhook_verifies_base64_signature_and_maps_nested_payload
@@ -88,11 +88,8 @@ class AltWithdrawalServiceContractTest < Minitest::Test
       raw_body: raw_body
     )
 
-    assert_equal :verified, result[:signature_verification]
-    assert_equal "withdrawal.SUCCESS", result[:event]
-    assert_equal "wd_123", result[:provider_operation_id]
-    assert_equal "merchant_42", result[:external_id]
-    assert_equal :approved, result[:status]
+    assert_equal true, result[:success]
+    assert_equal [{ action: :approve, operation_id: "wd_123" }], service.platform_actions
   end
 
   def test_fetch_cancel_and_balance_dispatch_basic_authenticated_requests
@@ -101,10 +98,11 @@ class AltWithdrawalServiceContractTest < Minitest::Test
     )
     service = Provider::AltWithdrawalService.new
     service.provider_client = client
-    assert_equal :approved, service.fetch_status({ "provider_operation_id" => "wd/1 ?" })[:status]
-    assert_equal :approved, service.cancel_payout({ "provider_operation_id" => "wd/1 ?" })[:status]
+    assert_equal true, service.fetch_status({ "id" => "op_1", "provider_operation_key" => "wd/1 ?" })[:success]
+    assert_equal [{ action: :approve, operation_id: "op_1" }], service.platform_actions
+    assert_equal true, service.cancel_payout({ "id" => "op_1", "provider_operation_key" => "wd/1 ?" })[:success]
     client.response = { status: 200, body: { "available_funds" => 901.25, "asset" => "EUR" } }
-    assert_equal 901.25, service.fetch_balance.dig(:raw, "available_funds")
+    assert_equal 901.25, service.fetch_balance.dig(:result, "available_funds")
 
     assert_equal %i[get delete get], client.requests.map { |request| request[:method] }
     assert_equal [

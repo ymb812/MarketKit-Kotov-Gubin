@@ -19,6 +19,7 @@ const kv = (pairs) => `<dl class="kv-grid">${pairs.map(([key, value]) => `<div><
 function reviewSummary(result) {
   const manifest = result.manifest;
   const warnings = manifest.warnings;
+  const counts = result.diagnostic_summary ?? {};
   const changes = manifest.overrides?.applied_changes?.length ?? 0;
   const applied = manifest.overrides?.applied;
   const ready = result.overall_status === "ready";
@@ -28,28 +29,72 @@ function reviewSummary(result) {
     ? "Контракт готов к генерации. Credentials и проверка в sandbox остаются задачей подключения."
     : onlySecret
       ? "Остаётся предупреждение о callback secret: задайте его в окружении host-приложения. Подробная готовность — в отчёте совместимости."
-      : `Открытых предупреждений: ${warnings.length}. Проверьте решения и отчёт совместимости; генерация создаст заготовку с этими ограничениями.`;
+      : `Открытых предупреждений: ${warnings.length}. Решения: ${counts.reviewable ?? warnings.length}; настройки: ${counts.manual_configuration ?? 0}; ограничения: ${counts.unsupported ?? 0}. Проверьте соответствующие действия и отчёт совместимости.`;
   return { ready, text: prefix + detail };
 }
 
-const warningHelp = {
-  STATUS_MAPPING_DEFAULT_RULES_APPLIED: ["Проверьте смысл статусов", "Подтвердите сопоставления статусов в overrides.", "mappings"],
-  CALLBACK_SECRET_NOT_DECLARED: ["Настройте секрет уведомлений", "Callback secret задаётся в окружении host-приложения при подключении.", "webhook"],
-  WEBHOOK_SIGNATURE_ENCODING_UNKNOWN: ["Уточните формат подписи", "Подтвердите encoding в overrides по документации провайдера.", "webhook"],
-  WEBHOOK_SIGNATURE_ALGORITHM_UNKNOWN: ["Уточните алгоритм подписи", "Выберите подтверждённый алгоритм в overrides.", "webhook"],
-  IDEMPOTENCY_SOURCE_REQUIRES_REVIEW: ["Укажите источник ключа идемпотентности", "Свяжите header с явным полем внутренней операции через override.", "mappings"],
-  CONDITIONAL_REQUIREMENT_INFERRED: ["Подтвердите условное требование", "Условие найдено в описании. Проверьте его и подтвердите через overrides.", "mappings"],
-  MISSING_CAPABILITY: ["Возможность не найдена", "Проверьте состав API. Отсутствующие операции не генерируются как доступные.", "overview"],
-  AMBIGUOUS_CAPABILITY: ["Нужно выбрать операцию", "Проверьте evidence и укажите intent операции в overrides.", "source"],
-  REQUEST_PARAMETER_MAPPING_NOT_FOUND: ["Нужен источник параметра", "Укажите host source для параметра запроса в overrides.", "mappings"],
-  AMOUNT_UNIT_AMBIGUOUS: ["Уточните единицы суммы", "Подтвердите unit и преобразование по контракту провайдера.", "mappings"],
-  PROVIDER_ERROR_CODE_NOT_FOUND: ["Код ошибки не заявлен", "Доступен HTTP-ответ; проверьте error contract и настройку host-обработки.", "webhook"]
+const diagnosticKindNames = {
+  reviewable: "Нужно решение",
+  manual_configuration: "Настройка подключения",
+  unsupported: "Ограничение",
+  invalid_spec: "Ошибка OpenAPI"
 };
 
-function renderWarnings(warnings) {
-  return warnings.length ? warnings.map((warning) => {
-    const [title, action, view] = warningHelp[warning.code] ?? ["Проверьте ограничение спецификации", "Сверьте исходные данные и описание диагностики ниже.", "source"];
-    return `<div class="warning-row"><span class="warning-icon" aria-hidden="true">△</span><div><strong>${e(title)}</strong><p>${e(action)}</p><details><summary>${e(warning.code)}</summary><p>${e(warning.message)}</p><code>${e(warning.location)}</code></details><button class="text-button" data-view="${view}">Открыть раздел →</button></div></div>`;
+function locateSourceRange(source, location) {
+  const text = String(source ?? "");
+  const hint = String(location ?? "");
+  const position = hint.match(/line\s+(\d+)(?:\s+column\s+(\d+))?/i);
+  if (position) {
+    const lineNumber = Number(position[1]);
+    const lines = text.split("\n");
+    if (lineNumber < 1 || lineNumber > lines.length) return null;
+    const start = lines.slice(0, lineNumber - 1).reduce((total, line) => total + line.length + 1, 0);
+    return { start, end: start + lines[lineNumber - 1].length, line: lineNumber, text: lines[lineNumber - 1] };
+  }
+
+  if (hint) {
+    const exactMatches = [];
+    let exactOffset = 0;
+    text.split("\n").forEach((line, index) => {
+      if (line.includes(hint)) exactMatches.push({ start: exactOffset, end: exactOffset + line.length, line: index + 1, text: line });
+      exactOffset += line.length + 1;
+    });
+    if (exactMatches.length === 1) return exactMatches[0];
+  }
+
+  const pointer = hint.includes("#/") ? hint.slice(hint.indexOf("#/") + 2) : "";
+  if (!pointer) return null;
+  const tokens = pointer.split("/").map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"));
+  const token = tokens.at(-1);
+  if (!token) return null;
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [];
+  let offset = 0;
+  text.split("\n").forEach((line, index) => {
+    if (new RegExp(`^\\s*["']?${escaped}["']?\\s*:`).test(line)) {
+      matches.push({ start: offset, end: offset + line.length, line: index + 1, text: line });
+    }
+    offset += line.length + 1;
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function diagnosticAction(diagnostic) {
+  const target = diagnostic.target;
+  if (!target?.view) return "";
+  return `<button class="text-button" data-diagnostic-view="${e(target.view)}" data-diagnostic-focus="${e(target.focus ?? "")}" data-diagnostic-location="${e(diagnostic.source_location ?? "")}">${e(target.label ?? "Открыть раздел")} →</button>`;
+}
+
+function renderWarnings(diagnostics, source = "") {
+  return diagnostics.length ? diagnostics.map((raw) => {
+    const diagnostic = raw.kind ? raw : {
+      ...raw, kind: "unsupported", title: "Диагностика без автоматического исправления",
+      guidance: "Изучите код, сообщение и location. Без метаданных remediation переход или override не предлагается.",
+      target: null, source_location: null
+    };
+    const range = locateSourceRange(source, diagnostic.source_location);
+    const excerpt = range ? `<pre class="source-snippet"><span>Строка ${range.line}</span><mark>${e(range.text.trim())}</mark></pre>` : "";
+    return `<div class="warning-row diagnostic-${e(diagnostic.kind)}"><span class="warning-icon" aria-hidden="true">△</span><div><span class="diagnostic-kind">${e(diagnosticKindNames[diagnostic.kind] ?? diagnostic.kind)}</span><strong>${e(diagnostic.title)}</strong><p>${e(diagnostic.guidance)}</p>${excerpt}<details><summary>${e(diagnostic.code)}</summary><p>${e(diagnostic.message)}</p><code>${e(diagnostic.location)}</code></details>${diagnosticAction(diagnostic)}</div></div>`;
   }).join("") : '<div class="empty-inline">Открытых предупреждений нет. Credentials задаются при подключении.</div>';
 }
 
@@ -103,6 +148,31 @@ function showView(view) {
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
+function focusSpecification(location) {
+  const editor = $("specification");
+  const range = locateSourceRange(editor.value, location);
+  editor.focus({ preventScroll: true });
+  if (!range) {
+    $("activity").textContent = "Точная строка неоднозначна: открыт OpenAPI, location сохранён в карточке диагностики.";
+    return false;
+  }
+
+  editor.setSelectionRange(range.start, range.end);
+  const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 22;
+  editor.scrollTop = Math.max(0, (range.line - 3) * lineHeight);
+  editor.classList.add("source-focus");
+  setTimeout(() => editor.classList.remove("source-focus"), 1400);
+  $("activity").textContent = `Открыт исходный фрагмент: строка ${range.line}.`;
+  return true;
+}
+
+function openDiagnosticTarget(target, location) {
+  if (!target?.view) return;
+  showView(target.view);
+  if (target.focus === "overrides") $("overrides").focus();
+  if (target.focus === "specification") focusSpecification(location);
+}
+
 function setBusy(busy, message) {
   state.busy = busy;
   $("activity").classList.toggle("busy", busy);
@@ -116,7 +186,7 @@ function syncControls() {
   $("generate").disabled = state.busy || !state.result;
   $("generate-empty").disabled = state.busy || !state.result;
   $("analyze").disabled = state.busy || !$("specification").value.trim();
-  $("review-demo").disabled = state.busy;
+  $("review-demo").disabled = state.busy || !state.result;
   $("download-bundle").disabled = !state.generated?.archive;
   $("open-review-data").disabled = state.busy || !state.result;
 }
@@ -128,7 +198,9 @@ function showError(error) {
   const message = error.code === "PARSE_ERROR"
     ? `Не удалось прочитать YAML/JSON входа. Проверьте OpenAPI «${$("filename").value}» и применяемый override${position ? `; строка ${position[1]}, столбец ${position[2]}` : ""}.`
     : `${error.code ?? "REQUEST_FAILED"}: ${error.message}`;
-  $("error-banner").innerHTML = `<p>${e(message)}</p><details><summary>Исходная диагностика</summary><pre>${e(raw)}</pre></details>`;
+  const locationHint = position ? `line ${position[1]} column ${position[2]}` : error.source_location;
+  const action = diagnosticAction({ ...error, source_location: locationHint });
+  $("error-banner").innerHTML = `<span class="diagnostic-kind">${e(diagnosticKindNames[error.kind] ?? "Ошибка")}</span><p>${e(message)}</p>${error.guidance ? `<p>${e(error.guidance)}</p>` : ""}<details><summary>Исходная диагностика</summary><pre>${e(raw)}</pre></details>${action}`;
   $("activity").textContent = "Не удалось завершить операцию. Исправьте входные данные и повторите анализ.";
 }
 
@@ -236,6 +308,7 @@ function renderResult() {
     $("metric-audit").textContent = "Неоднозначности видны до генерации";
     $("readiness").innerHTML = '<span class="pill neutral">Ожидание анализа</span>';
     $("review-description").textContent = "Неоднозначные факты остаются видимыми в manifest.";
+    $("review-help").textContent = "Сначала выполните анализ: действие зависит от типа диагностики.";
     $("review-delta").hidden = true;
     $("capabilities").innerHTML = '<div class="empty-inline">Проанализируйте спецификацию, чтобы увидеть возможности API.</div>';
     $("warnings").innerHTML = '<div class="empty-inline">Предупреждения появятся после анализа.</div>';
@@ -253,9 +326,10 @@ function renderResult() {
   const missing = Object.values(manifest.capabilities).filter((item) => item.status === "missing").length;
   $("capability-explanation").textContent = `${detected} обнаружено · ${missing} не заявлено · ${5 - detected - missing} требуют выбора. Это состав API, не процент готовности.`;
   $("metric-operations").textContent = manifest.operations.length;
-  $("metric-warnings").textContent = manifest.warnings.length;
+  const diagnosticSummary = state.result.diagnostic_summary ?? { total: manifest.warnings.length };
+  $("metric-warnings").textContent = diagnosticSummary.total;
   $("metric-auth").textContent = `${authLabel(manifest.auth.schemes[0])} · ${manifest.provider.slug}`;
-  $("metric-audit").textContent = manifest.overrides?.applied ? `${manifest.overrides.resolved_warnings.length} предупреждений сохранено в audit` : "Ожидают проверки или настройки";
+  $("metric-audit").textContent = `${diagnosticSummary.reviewable ?? 0} решений · ${diagnosticSummary.manual_configuration ?? 0} настроек · ${diagnosticSummary.unsupported ?? 0} ограничений`;
   $("spec-version").textContent = `OpenAPI ${manifest.source.openapi_version}`;
   $("readiness").innerHTML = pill(state.result.overall_status);
   $("review-description").textContent = summary.text;
@@ -264,7 +338,21 @@ function renderResult() {
     const before = Object.values(inferred.capabilities).filter((item) => item.status === "detected").length;
     $("review-delta").textContent = `Capabilities: ${before} → ${detected} · предупреждения: ${inferred.warnings.length} → ${manifest.warnings.length}`;
   }
-  $("review-demo").innerHTML = 'Открыть overrides <span>→</span>';
+  const diagnostics = state.result.diagnostics ?? manifest.warnings;
+  const primary = diagnostics.find((item) => item.kind === "reviewable" && item.target) ||
+    diagnostics.find((item) => item.kind === "manual_configuration" && item.target) ||
+    diagnostics.find((item) => item.target);
+  $("review-demo").textContent = primary?.target?.label ?? "Открыть manifest";
+  $("review-demo").dataset.diagnosticView = primary?.target?.view ?? "overview";
+  $("review-demo").dataset.diagnosticFocus = primary?.target?.focus ?? "";
+  $("review-demo").dataset.diagnosticLocation = primary?.source_location ?? "";
+  $("review-help").textContent = primary?.kind === "reviewable"
+    ? "Проверьте предложенное решение, примените override и повторите анализ."
+    : primary?.kind === "manual_configuration"
+      ? "Это значение задаётся в host-приложении; override не требуется."
+      : primary
+        ? "Откройте исходный контекст ограничения; автоматического исправления нет."
+        : "Открытых diagnostics нет; подробности доступны в manifest и отчёте.";
   $("source-hash").textContent = `SHA-256 ${manifest.source.sha256?.slice(0, 12) ?? "—"}…`;
   $("capabilities").innerHTML = Object.entries(capabilities).map(([intent, [title, icon]]) => {
     const capability = manifest.capabilities[intent];
@@ -272,8 +360,8 @@ function renderResult() {
     const evidence = operation?.evidence ?? [];
     return `<div class="capability"><span class="cap-icon">${icon}</span><div><strong>${title}</strong><div class="endpoint">${operation ? `<span class="method ${e(operation.method.toLowerCase())}">${e(operation.method)}</span><span>${e(operation.path)}</span>` : '<span>Нет выбранной операции</span>'}</div></div><div class="cap-status">${pill(capability.status)}${capability.status !== "missing" ? `<span class="confidence">${Math.round(capability.confidence * 100)}% confidence</span>` : ""}</div>${evidence.length ? `<details class="evidence"><summary>Почему выбрана эта операция</summary><ul>${evidence.map((item) => `<li>${e(typeof item === "string" ? item : item.detail ?? item.rule)}</li>`).join("")}</ul></details>` : ""}</div>`;
   }).join("");
-  $("warning-count").textContent = `${manifest.warnings.length} открыто`;
-  $("warnings").innerHTML = renderWarnings(manifest.warnings);
+  $("warning-count").textContent = `${diagnosticSummary.reviewable ?? 0} решений · ${diagnosticSummary.manual_configuration ?? 0} настроек · ${diagnosticSummary.unsupported ?? 0} ограничений`;
+  $("warnings").innerHTML = renderWarnings(diagnostics, $("specification").value);
   renderReviewData(manifest);
   renderMappings(manifest);
   renderWebhook(manifest);
@@ -289,7 +377,11 @@ function renderMappings(manifest) {
   if (conditions.length) html += panel("Условные требования", table(["Поле", "Обязательно, когда", "Проверка"], conditions.map((rule) => [code(rule.field), code(`${rule.required_if.field} = ${rule.required_if.equals}`), pill(rule.requires_review ? "requires_review" : "ready")])));
   Object.entries(manifest.field_mappings).forEach(([intent, mapping]) => {
     if (!mapping.request.length && !mapping.response.length) return;
-    const rows = mapping.request.map((field) => [code(field.source_candidate ?? "нужен mapping"), `${code(field.target)}<small>${e(field.location ?? "body")}</small>`, field.required ? "Обязательное" : "Опциональное", pill(field.requires_review || !field.source_candidate ? "requires_review" : "ready", field.requires_review || !field.source_candidate ? "Проверить" : "Определено")]);
+    const rows = mapping.request.map((field) => {
+      const declared = field.source_candidate != null || Object.prototype.hasOwnProperty.call(field, "constant_value");
+      const source = field.source_candidate ?? (declared ? `constant: ${JSON.stringify(field.constant_value)}` : "нужен mapping");
+      return [code(source), `${code(field.target)}<small>${e(field.location ?? "body")}</small>`, field.required ? "Обязательное" : "Опциональное", pill(field.requires_review || !declared ? "requires_review" : "ready", field.requires_review || !declared ? "Проверить" : "Определено")];
+    });
     html += panel(`${capabilities[intent]?.[0] ?? intent}: поля запроса`, table(["Источник в host", "Поле провайдера", "Обязательность", "Проверка"], rows));
     if (mapping.response.length) html += panel(`${capabilities[intent]?.[0] ?? intent}: поля ответа`, table(["Источник провайдера", "Внутренняя роль", "HTTP"], mapping.response.map((field) => [code(field.source), code(field.role), e(field.http_status)])));
   });
@@ -302,7 +394,7 @@ function renderWebhook(manifest) {
   if (webhook.status === "detected") {
     html += panel("Проверка подписи", kv([["Операция", webhook.operation_key], ["Signature header", webhook.signature?.header ?? "Нужен выбор"], ["Алгоритм", webhook.signature?.algorithm ?? "Нужен override"], ["Encoding", webhook.signature?.encoding ?? "Нужен override"]]));
     html += panel("Payload mappings", kv(Object.entries(webhook.payload ?? {}).map(([key, value]) => [key, value ?? "Не определено"])));
-    html += '<div class="hint-box">process_callback(payload) обрабатывает разобранный JSON; подлинность уведомления должен проверить HTTP-слой хоста. process_verified_callback(raw_body, headers:) проверяет подпись по исходным байтам, заголовку и callback secret, затем обрабатывает подписанный body. Отсутствующие или неоднозначные status/id paths блокируют callback.</div>';
+    html += '<div class="hint-box">process_callback(payload) принимает разобранный JSON после аутентификации хостом и применяет terminal status через approve_operation / reject_operation. process_verified_callback(raw_body, headers:) проверяет подпись по исходным байтам, заголовку и callback secret. Неизвестный статус не меняет операцию; отсутствующие или неоднозначные status/id paths блокируют callback.</div>';
   } else html += panel("Входящие уведомления", `<div class="empty-inline">${webhook.status === "missing" ? "Webhook не заявлен или не распознан в этой спецификации." : "Выбор webhook-операции требует review."}</div>`, pill(webhook.status));
   html += panel("Ошибки провайдера", table(["Операция", "HTTP", "Коды", "Headers"], manifest.errors.map((error) => [code(error.operation_key), code(error.http_status), code((error.possible_provider_codes ?? []).join(", ") || "Не заявлены"), code((error.headers ?? []).join(", ") || "—")])));
   $("webhook-content").innerHTML = html;
@@ -394,6 +486,13 @@ async function loadFile(file, type) {
 
 function bindControls() {
 document.addEventListener("click", (event) => {
+  const diagnostic = event.target.closest("[data-diagnostic-view]");
+  if (diagnostic) {
+    openDiagnosticTarget(
+      { view: diagnostic.dataset.diagnosticView, focus: diagnostic.dataset.diagnosticFocus },
+      diagnostic.dataset.diagnosticLocation
+    );
+  }
   const view = event.target.closest("[data-view]");
   if (view) showView(view.dataset.view);
   const example = event.target.closest("[data-example]");
@@ -409,10 +508,6 @@ $("analyze").addEventListener("click", analyze);
 $("generate").addEventListener("click", generate);
 $("generate-empty").addEventListener("click", generate);
 $("upload-shortcut").addEventListener("click", () => $("spec-file").click());
-$("review-demo").addEventListener("click", () => {
-  showView("source");
-  $("overrides").focus();
-});
 ["filename", "provider", "specification", "overrides"].forEach((id) => $(id).addEventListener("input", () => {
   if (id !== "overrides") { state.selected = null; renderExamples(); }
   markDirty();
@@ -465,7 +560,7 @@ async function init() {
   } catch (error) { showError(error); setBusy(false); }
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { reviewSummary, renderWarnings, readableMarkdown };
+  module.exports = { reviewSummary, renderWarnings, readableMarkdown, locateSourceRange };
 } else {
   bindControls();
   init();

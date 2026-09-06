@@ -16,6 +16,7 @@ module IntegrationGenerator
           review_provenance,
           capabilities,
           authentication,
+          host_contract,
           field_mappings,
           transformations,
           status_mapping,
@@ -158,12 +159,30 @@ module IntegrationGenerator
           mapping.fetch("request", []).each do |field|
             count += 1
             confidence = format("%.0f%%", field.fetch("confidence", 0.0) * 100)
-            lines << "| `#{intent}` | `#{field['role']}` | `#{Support.escape_markdown(field['target'])}` | #{field['location'] || 'body'} | `#{field['source_candidate'] || 'unmapped'}` | #{confidence} | `#{field['provenance'] || 'inferred'}` | #{field['requires_review'] ? 'yes' : 'no'} |"
+            source = if field.key?("constant_value")
+                       "constant: #{field['constant_value'].inspect}"
+                     else
+                       field["source_candidate"] || "unmapped"
+                     end
+            lines << "| `#{intent}` | `#{field['role']}` | `#{Support.escape_markdown(field['target'])}` | #{field['location'] || 'body'} | `#{Support.escape_markdown(source)}` | #{confidence} | `#{field['provenance'] || 'inferred'}` | #{field['requires_review'] ? 'yes' : 'no'} |"
           end
         end
         return "## Field mappings\n\nNo request field mappings were inferred." if count.zero?
 
         lines.join("\n")
+      end
+
+      def host_contract
+        <<~MARKDOWN.chomp
+          ## Host service contract
+
+          - Guaranteed operation inputs are `operation.id`, `operation.amount` and the JSONB/hash `operation.payout_requisite`. Fetch/cancel use `operation.provider_operation_key` after creation.
+          - `create_request` sends the provider request, parses the response and returns `success(result: { id: provider_id })`. `create_payout` is a compatibility alias.
+          - `fetch_status` and `process_callback` apply terminal states through `approve_operation` / `reject_operation`; they do not return `success(result: { status: ... })` for the platform to interpret.
+          - Provider HTTP errors are converted to platform codes such as `bad_request`, `unauthorized`, `forbidden`, `unprocessable_entity`, `too_many_requests` and `internal_server_error`.
+          - `request_method` is the logical gateway/payment method, not an HTTP verb. A reviewed mapping may use it for fields such as recipient type.
+          - `build_provider_request` is an inspection/testing boundary that builds but does not send the outbound request.
+        MARKDOWN
       end
 
       def transformations
@@ -216,7 +235,7 @@ module IntegrationGenerator
           lines << "| `#{Support.escape_markdown(error['operation_key'])}` | `#{error['http_status']}` | `#{error.fetch('provider_code_paths', []).join(', ')}` | `#{error.fetch('example_provider_codes', []).join(', ')}` | `#{error.fetch('headers', []).join(', ')}` |"
         end
         lines << ""
-        lines << "The manifest describes provider facts only. Operational retry/block/alert policy is not inferred from OpenAPI."
+        lines << "The manifest describes provider facts. Generated runtime failures use the platform's standard error symbols; provider-specific retry/block/alert policy is not inferred from OpenAPI. A provider code equal to `amount_limit_exceeded` is treated as a per-operation validation rejection (`unprocessable_entity`) for this contract."
         lines.join("\n")
       end
 
@@ -239,11 +258,11 @@ module IntegrationGenerator
             "- Secret placeholder: `ENV[\"#{@manifest.dig('provider', 'slug').upcase}_WEBHOOK_SECRET\"]`",
             "- Event/status/id paths: `#{payload['event_path'] || 'unknown'}` / `#{payload['status_path'] || 'unknown'}` / `#{payload['provider_operation_id_path'] || 'unknown'}`",
             "",
-            "`process_callback(payload)` accepts a parsed JSON object, as required by the host contract. It maps the payload and returns `signature_verification: :host_required`: the host must authenticate incoming notifications before applying the result. Parsing alone does not verify a signature.",
+            "`process_callback(payload)` accepts a parsed JSON object after the host has authenticated the notification. It maps the configured status path and calls `approve_operation(provider_id)` or `reject_operation(provider_id, reason)` for terminal states; in-progress or unknown states return plain `success`.",
             "",
             "At the HTTP boundary, call `process_verified_callback(raw_body, headers:)` to verify the exact signed bytes and then map that body. It requires the signature header and callback secret, and fails closed when configuration or verification is incomplete. Never re-serialize a parsed Hash to reconstruct signed bytes. Legacy `process_callback` calls with explicit raw_body/headers also use this verification path.",
             "",
-            "The configured payload status path determines the normalized status; event is returned separately and does not override it. Unknown or unconfirmed statuses remain unknown. Any provider-specific event/status precedence must be reviewed explicitly."
+            "The configured payload status path determines the normalized status; event text does not override it. Unknown or unconfirmed statuses do not change the platform operation. Any provider-specific event/status precedence must be reviewed explicitly."
           ]
         )
         lines.join("\n")
@@ -258,8 +277,9 @@ module IntegrationGenerator
 
       def manual_steps
         lines = ["## Manual configuration and TODOs", ""]
-        lines << "- **HOST_CONTRACT**: provide `provider_client.call(method:, url:, headers:, query:, body:)` and the host `Provider::BaseService`/operation model."
-        lines << "- **SAFE_DEFAULTS**: request mappings marked for review and incompletely configured raw-body webhook verification fail closed. Parsed callback processing leaves authentication to the host; do not treat its result as signature verification. Use explicit inspection flags only outside production until an override is applied."
+        lines << "- **HOST_CONTRACT**: provide `provider_client.call(method:, url:, headers:, query:, body:)`, `success`, `failure`, `approve_operation`, `reject_operation` and the documented operation fields."
+        lines << "- **UNKNOWN_REQUISITES**: when a required provider field has no confirmed host schema (for example an unfamiliar account or tax identifier), keep the generated TODO and add an explicit reviewed mapping. Do not assume `payout_requisite[provider_field_name]`."
+        lines << "- **SAFE_DEFAULTS**: request mappings marked for review and incompletely configured raw-body webhook verification fail closed. The host must authenticate parsed callbacks before calling `process_callback`. Use explicit inspection flags only outside production until an override is applied."
         lines.join("\n")
       end
     end

@@ -99,9 +99,9 @@ module IntegrationGenerator
         ]
         MAPPED_CAPABILITIES.each do |intent|
           mappings = @manifest.dig("field_mappings", intent, "request") || []
-          confirmed = mappings.count { |mapping| mapping["source_candidate"] && !mapping["requires_review"] }
+          confirmed = mappings.count { |mapping| mapping_value_declared?(mapping) && !mapping["requires_review"] }
           review = mappings.count { |mapping| mapping["requires_review"] }
-          unmapped_required = mappings.count { |mapping| mapping["required"] && mapping["source_candidate"].nil? }
+          unmapped_required = mappings.count { |mapping| mapping["required"] && !mapping_value_declared?(mapping) }
           lines << "| `#{intent}` | **#{label(mapping_assessment(intent))}** | #{confirmed} | #{review} | #{unmapped_required} |"
         end
         lines.join("\n")
@@ -143,7 +143,7 @@ module IntegrationGenerator
               "- Signature: `#{signature['header'] || 'unknown'}` / `#{signature['algorithm'] || 'unknown'}` / `#{signature['encoding'] || 'unknown'}`",
               "- Payload status path: `#{payload['status_path'] || 'unknown'}`",
               "- Provider operation id path: `#{payload['provider_operation_id_path'] || 'unknown'}`",
-              "- Parsed `process_callback(payload)` leaves authentication to the host (`host_required`). Raw body, signature header and callback secret are required by `process_verified_callback(raw_body, headers:)` at the HTTP boundary."
+              "- Parsed `process_callback(payload)` assumes host authentication and applies terminal states through `approve_operation` / `reject_operation`. Raw body, signature header and callback secret are required by `process_verified_callback(raw_body, headers:)` at the HTTP boundary."
             ]
           )
         end
@@ -257,9 +257,13 @@ module IntegrationGenerator
 
         request = mapping.fetch("request", [])
         return "needs_review" if request.any? { |field| field["requires_review"] }
-        return "needs_review" if request.any? { |field| field["source_candidate"].nil? }
+        return "needs_review" if request.any? { |field| !mapping_value_declared?(field) }
 
         "ready"
+      end
+
+      def mapping_value_declared?(mapping)
+        !mapping["source_candidate"].nil? || mapping.key?("constant_value")
       end
 
       def amount_assessment

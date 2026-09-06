@@ -34,9 +34,21 @@
           "confirm": true
         },
         {
+          "target": "beneficiary.type",
+          "location": "body",
+          "source": "request_method",
+          "confirm": true
+        },
+        {
+          "target": "asset",
+          "location": "body",
+          "value": "EUR",
+          "confirm": true
+        },
+        {
           "target": "Idempotency-Token",
           "location": "header",
-          "source": "operation.idempotency_key",
+          "source": "operation.id",
           "confirm": true
         }
       ]
@@ -83,6 +95,14 @@
     {
       "code": "IDEMPOTENCY_SOURCE_REQUIRES_REVIEW",
       "location": "#/field_mappings/create_payout/request/Idempotency-Token"
+    },
+    {
+      "code": "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND",
+      "location": "#/field_mappings/create_payout/request/beneficiary.type"
+    },
+    {
+      "code": "REQUIRED_REQUEST_BODY_MAPPING_NOT_FOUND",
+      "location": "#/field_mappings/create_payout/request/asset"
     },
     {
       "code": "CONDITIONAL_REQUIREMENT_INFERRED",

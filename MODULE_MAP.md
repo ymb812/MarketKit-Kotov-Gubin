@@ -14,6 +14,8 @@ flowchart LR
     ANALYZE --> INFERRED[Inferred Integration Manifest]
     INFERRED --> OVERRIDES[Validated overrides and audit]
     OVERRIDES --> FINAL[Final Integration Manifest]
+    FINAL --> REMEDIATION[Diagnostic remediation metadata]
+    REMEDIATION --> WEBUI[Web warning cards]
     FINAL --> BUNDLE[Artifact generators]
     BUNDLE --> VALIDATE[Bundle validation]
     VALIDATE --> WRITE[Atomic output writer]
@@ -31,6 +33,7 @@ flowchart LR
 6. `generator/` читает только final manifest. Доступ к исходному YAML/JSON из генератора нарушает архитектурную границу.
 7. `OutputWriter` отвечает за публикацию, а не за смысл интеграции: он проверяет имена, записывает staging-каталог, запускает внешний `ruby -c` и только затем делает каталог итоговым.
 8. Web UI не реализует второй pipeline. Он вызывает те же Ruby parser, analyzers, overrides и generators, что CLI.
+9. `DiagnosticRemediation` не меняет manifest. Он классифицирует уже полученные diagnostics и сообщает UI, какое действие допустимо.
 
 ## Точки входа и оркестрация
 
@@ -41,6 +44,7 @@ flowchart LR
 | [`bin/demo`](bin/demo) | Один воспроизводимый прогон трёх demo-specs, review transition и проверка пяти файлов | необязательный новый output root → три bundle | публичный CLI | [`demo_test.rb`](test/demo_test.rb) |
 | [`bin/serve`](bin/serve) | Bootstrap локального интерфейса на `127.0.0.1` | port → WEBrick server | `Web::Server` | [`entrypoints_test.rb`](test/entrypoints_test.rb), [`server_test.rb`](test/web/server_test.rb) |
 | [`errors.rb`](lib/integration_generator/errors.rb) | Единый предметный формат `code/message/location` | причина ошибки → форматированное сообщение | нет доменных зависимостей | negative tests parser/CLI/generator |
+| [`DiagnosticRemediation`](lib/integration_generator/diagnostic_remediation.rb) | Разделяет review, ручную настройку, unsupported и invalid spec; задаёт безопасный CTA | warning/error → presentation metadata | не изменяет manifest и не применяет override | [`diagnostic_remediation_test.rb`](test/diagnostic_remediation_test.rb), web tests |
 
 ## OpenAPI и Generic IR
 
@@ -77,12 +81,12 @@ Generic IR сохраняет факты входа даже тогда, ког�
 | Модуль | Ответственность | Вход → выход | Основная проверка |
 |---|---|---|---|
 | [`ProviderIR::Operation`](lib/integration_generator/provider_ir/operation.rb) | Валидирует intent и хранит operation contract/classification | attributes → immutable-style serializable operation | manifest builder tests |
-| [`ProviderIR::Manifest`](lib/integration_generator/provider_ir/manifest.rb) | Проверяет обязательные sections, типы, capabilities→operations, auth references/requirements, webhook shapes и override audit | manifest Hash → validated manifest | [`runtime_validation_test.rb`](test/provider_ir/runtime_validation_test.rb) |
+| [`ProviderIR::Manifest`](lib/integration_generator/provider_ir/manifest.rb) | Проверяет обязательные sections, типы, capabilities→operations, auth references/requirements, request source/constant exclusivity, webhook shapes и override audit | manifest Hash → validated manifest | [`runtime_validation_test.rb`](test/provider_ir/runtime_validation_test.rb) |
 | [`ManifestLoader`](lib/integration_generator/provider_ir/manifest_loader.rb) | Безопасно читает prebuilt YAML/JSON manifest и переводит malformed shapes в `MANIFEST_*` errors | файл → `ProviderIR::Manifest` | runtime validation и CLI manifest tests |
 | [`Overrides::Loader`](lib/integration_generator/overrides/loader.rb) | Безопасно читает versioned YAML/JSON override | файл → override Hash | [`applier_test.rb`](test/overrides/applier_test.rb) |
 | [`Overrides::Applier`](lib/integration_generator/overrides/applier.rb) | Строго проверяет targets/values, применяет intent/status/field/amount/condition/webhook changes, пересчитывает зависимости и сохраняет audit | inferred manifest + override → final manifest | [`applier_test.rb`](test/overrides/applier_test.rb), generator regressions |
 
-Override подтверждает решение, но не подменяет структурный контракт произвольными данными. Например, новый request mapping можно добавить только к существующему schema path; warning снимается только точным `code + location`, связанным с реальным изменением.
+Override подтверждает решение, но не подменяет структурный контракт произвольными данными. Request mapping принимает один из источников: `operation.*`, логический `request_method` либо scalar-константу `value`; `source` и `value` нельзя сочетать. Новый mapping можно добавить только к существующему schema path, а warning снимается только точным `code + location`, связанным с реальным изменением.
 
 ## Генерация и публикация
 
@@ -96,17 +100,17 @@ Override подтверждает решение, но не подменяет �
 | [`ArtifactBundle`](lib/integration_generator/generator/artifact_bundle.rb) | Собирает пять файлов и валидирует их в памяти | manifest-only input, deterministic output, Ruby compile/JSON/YAML checks | [`artifact_bundle_test.rb`](test/generator/artifact_bundle_test.rb) |
 | [`OutputWriter`](lib/integration_generator/generator/output_writer.rb) | Безопасно публикует новый каталог | lock, staging, safe filenames, no overwrite, внешний `ruby -c`, cleanup при ошибке | [`output_writer_test.rb`](test/generator/output_writer_test.rb) |
 
-Generated service отделяет три разных обязанности. `build_request` строит transport-neutral request, `dispatch` вызывает переданный `provider_client`, `normalize_response` возвращает host-friendly facts. Сохранение provider operation id, retry/block/alert policy и реальный HTTP transport остаются у host-приложения.
+Generated service отделяет внутренние transport-шаги от платформенного результата. `build_request` строит request, `dispatch` вызывает `provider_client`, `normalize_response` извлекает provider facts. Публичный `create_request` возвращает `success(result: { id: ... })`; fetch/cancel используют `operation.provider_operation_key`, а стандартные HTTP/domain failures передаются через `failure`.
 
-Callback тоже имеет два явно разных входа. `process_callback(payload)` принимает parsed Hash и помечает результат `signature_verification: :host_required`. `process_verified_callback(raw_body, headers:)` проверяет HMAC на исходных байтах и затем разбирает именно подписанное тело.
+Callback имеет два входа. `process_callback(payload)` принимает уже аутентифицированный parsed Hash и вызывает `approve_operation` / `reject_operation` для terminal status. `process_verified_callback(raw_body, headers:)` проверяет HMAC на исходных байтах и затем применяет тот же status flow.
 
 ## Локальный web-слой
 
 | Модуль | Ответственность | Граница | Проверка |
 |---|---|---|---|
-| [`Web::Application`](lib/integration_generator/web/application.rb) | Каталог demo-specs, analyze/generate, новый output, safe archive/download | вызывает canonical Ruby pipeline; не читает произвольные download paths | [`application_test.rb`](test/web/application_test.rb) |
+| [`Web::Application`](lib/integration_generator/web/application.rb) | Каталог demo-specs, analyze/generate, remediation DTO, новый output, safe archive/download | вызывает canonical Ruby pipeline; не читает произвольные download paths | [`application_test.rb`](test/web/application_test.rb) |
 | [`Web::Server`](lib/integration_generator/web/server.rb) | WEBrick routing, JSON, Host/Origin/content-type guards, static allowlist | только `127.0.0.1`, локальный однопользовательский инструмент | [`server_test.rb`](test/web/server_test.rb) |
-| [`web/app.js`](web/app.js), [`index.html`](web/index.html), [`app.css`](web/app.css) | Review workspace и preview/download пяти файлов | отображение; доменные решения принимает backend | [`frontend_test.js`](test/web/frontend_test.js) |
+| [`web/app.js`](web/app.js), [`index.html`](web/index.html), [`app.css`](web/app.css) | Review workspace, типизированные warning cards, безопасный переход к строке OpenAPI и preview/download | отображение; доменные решения принимает backend; неоднозначный location не подсвечивается наугад | [`frontend_test.js`](test/web/frontend_test.js) |
 
 ## Как расширять систему
 
@@ -126,7 +130,7 @@ Callback тоже имеет два явно разных входа. `process_c
 
 ### Расширить override-контракт
 
-Изменение проходит через `Overrides::Applier`, validation final manifest и потребителя в generator/runtime. Нужны проверки неизвестного key/value/target, before/after audit и невозможности снять несвязанный warning. Версию override следует менять при несовместимом контракте.
+Изменение проходит через `Overrides::Applier`, validation final manifest и потребителя в generator/runtime. Для mapping нужно явно решить, является ли значение host path, `request_method` или константой. Нужны проверки неизвестного key/value/target, взаимоисключающих источников, before/after audit и невозможности снять несвязанный warning. Версию override следует менять при несовместимом контракте.
 
 ### Добавить новую capability
 

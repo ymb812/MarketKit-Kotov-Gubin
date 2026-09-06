@@ -28,6 +28,8 @@ class GeneratedServiceContractTest < Minitest::Test
   end
 
   def test_builds_and_dispatches_create_request_through_explicit_client_boundary
+    remove_generated_service(:NovapayService)
+    eval(canonical_artifacts(overridden: true).fetch("novapay_service.rb"), TOPLEVEL_BINDING, "generated/novapay_service.rb")
     response = {
       status: 201,
       headers: {},
@@ -38,13 +40,9 @@ class GeneratedServiceContractTest < Minitest::Test
     service.provider_client = client
     operation = {
       "id" => "op_1",
-      "idempotency_key" => "op_1",
       "amount" => 1500,
-      "currency" => "RUB",
       "payout_requisite" => {
-        "type" => "sbp",
-        "phone" => "79001234567",
-        "bank_code" => "044525225"
+        "sbp" => { "phone" => "79001234567", "bank_code" => "044525225" }
       }
     }
 
@@ -56,10 +54,11 @@ class GeneratedServiceContractTest < Minitest::Test
     assert_equal "test-api-key", request.dig(:headers, "X-API-Key")
     assert_equal "op_1", request.dig(:headers, "Idempotency-Key")
     assert_equal 150_000, request.dig(:body, "amount")
+    assert_equal "RUB", request.dig(:body, "currency")
+    assert_equal "sbp", request.dig(:body, "recipient", "type")
     assert_equal "79001234567", request.dig(:body, "recipient", "phone")
     assert_equal true, result[:success]
-    assert_equal "np_1", result[:provider_operation_id]
-    assert_equal :unknown, result[:status], "Default status synonyms need review before runtime use"
+    assert_equal "np_1", result.dig(:result, :id)
   end
 
   def test_fetch_status_interpolates_provider_operation_id
@@ -70,11 +69,12 @@ class GeneratedServiceContractTest < Minitest::Test
     service = Provider::NovapayService.new
     service.provider_client = client
 
-    result = service.fetch_status({ "provider_operation_id" => "np/1 ?" })
+    result = service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np/1 ?" })
 
     assert_equal :get, client.requests.first[:method]
     assert_equal "https://api.sandbox.novapay.example/v1/payouts/np%2F1%20%3F", client.requests.first[:url]
-    assert_equal :unknown, result[:status], "Unreviewed status must remain unknown"
+    assert_equal true, result[:success]
+    assert_empty service.platform_actions, "Unreviewed status must not change the platform operation"
   end
 
   def test_callback_is_mapped_but_does_not_claim_unknown_signature_encoding
@@ -87,9 +87,8 @@ class GeneratedServiceContractTest < Minitest::Test
     }
     result = service.process_callback(payload)
 
-    assert_equal "np_1", result[:provider_operation_id]
-    assert_equal :unknown, result[:status], "Inspection does not confirm status semantics"
-    assert_equal :host_required, result[:signature_verification]
+    assert_equal true, result[:success]
+    assert_empty service.platform_actions, "Inspection does not confirm status semantics"
     assert_raises(Provider::NovapayService::ConfigurationError) do
       service.process_verified_callback(JSON.generate(payload), headers: {})
     end
@@ -104,16 +103,15 @@ class GeneratedServiceContractTest < Minitest::Test
     service = Provider::NovapayService.new
     operation = {
       "amount" => 1500,
-      "currency" => "RUB",
       "id" => "op_1",
-      "payout_requisite" => { "type" => "sbp", "phone" => "79001234567" }
+      "payout_requisite" => { "sbp" => { "phone" => "79001234567" } }
     }
 
-    errors = service.check_conditions(operation, :sbp)
+    result = service.check_conditions(operation, :sbp)
 
-    assert_equal 1, errors.length
-    assert_equal "conditional_required_field_missing", errors.first.fetch(:code)
-    assert_equal "operation.payout_requisite.bank_code", errors.first.fetch(:field)
+    assert_equal false, result[:success]
+    assert_equal :bad_request, result[:code]
+    assert_includes result[:message], "recipient.bank_code"
   end
 
   def test_parsed_callback_contract_does_not_claim_transport_authentication
@@ -125,16 +123,15 @@ class GeneratedServiceContractTest < Minitest::Test
 
     result = service.process_callback(payload)
 
-    assert_equal "np_1", result[:provider_operation_id]
-    assert_equal :approved, result[:status], "The configured payload status path controls the mapping, not event"
-    assert_equal "payout.failed", result[:event]
-    assert_equal :host_required, result[:signature_verification]
-    assert_equal payload, result[:raw]
+    assert_equal true, result[:success]
+    assert_equal [{ action: :approve, operation_id: "np_1" }], service.platform_actions,
+                 "The configured payload status path controls the mapping, not event"
     assert_raises(ArgumentError) { service.process_callback(JSON.generate(payload)) }
     assert_includes artifacts.fetch("INTEGRATION.md"), "process_verified_callback(raw_body, headers:)"
     fixtures = JSON.parse(artifacts.fetch("fixtures.json"))
-    assert_equal "host_required", fixtures.dig("fixtures", "webhook", "callbacks", 0, "expected", "signature_verification")
+    assert_equal "approve_operation", fixtures.dig("fixtures", "webhook", "callbacks", 0, "expected", "platform_action")
     assert_equal "parsed_json_object", fixtures.dig("fixtures", "webhook", "processing", "input")
+    assert_equal "host_required", fixtures.dig("fixtures", "webhook", "processing", "authentication")
   end
 
   def test_overridden_service_needs_no_mapping_escape_hatch_and_verifies_hex_webhook
@@ -144,19 +141,15 @@ class GeneratedServiceContractTest < Minitest::Test
     service = Provider::NovapayService.new
     operation = {
       "amount" => 1500,
-      "currency" => "RUB",
       "id" => "op_1",
-      "idempotency_key" => "idem_1",
       "payout_requisite" => {
-        "type" => "sbp",
-        "phone" => "79001234567",
-        "bank_code" => "044525225"
+        "sbp" => { "phone" => "79001234567", "bank_code" => "044525225" }
       }
     }
 
-    request = service.create_request(operation)
+    request = service.build_provider_request(operation, request_method: :sbp)
 
-    assert_equal "idem_1", request.dig(:headers, "Idempotency-Key")
+    assert_equal "op_1", request.dig(:headers, "Idempotency-Key")
     assert_equal 150_000, request.dig(:body, "amount")
 
     raw_body = JSON.generate(
@@ -172,8 +165,8 @@ class GeneratedServiceContractTest < Minitest::Test
       headers: { "X-NovaPay-Signature" => signature }
     )
 
-    assert_equal :verified, result[:signature_verification]
-    assert_equal :approved, result[:status]
+    assert_equal true, result[:success]
+    assert_equal [{ action: :approve, operation_id: "np_1" }], service.platform_actions
     assert_raises(Provider::NovapayService::ProviderError) do
       service.process_verified_callback(raw_body + " ", headers: { "X-NovaPay-Signature" => signature })
     end
@@ -191,6 +184,44 @@ class GeneratedServiceContractTest < Minitest::Test
         raw_body: raw_body
       )
     end
+  end
+
+  def test_card_number_uses_flat_payout_requisite_key
+    remove_generated_service(:NovapayService)
+    eval(canonical_artifacts(overridden: true).fetch("novapay_service.rb"), TOPLEVEL_BINDING, "generated/novapay_service.rb")
+    service = Provider::NovapayService.new
+    operation = {
+      "id" => "op_card", "amount" => 20,
+      "payout_requisite" => {
+        "card_number" => "4111111111111111",
+        "sbp" => { "phone" => "79001234567" }
+      }
+    }
+
+    request = service.build_provider_request(operation, request_method: :card)
+
+    assert_equal "card", request.dig(:body, "recipient", "type")
+    assert_equal "4111111111111111", request.dig(:body, "recipient", "card_number")
+  end
+
+  def test_amount_limit_exceeded_is_a_platform_validation_failure
+    remove_generated_service(:NovapayService)
+    eval(canonical_artifacts(overridden: true).fetch("novapay_service.rb"), TOPLEVEL_BINDING, "generated/novapay_service.rb")
+    service = Provider::NovapayService.new
+    service.provider_client = FakeClient.new(
+      { status: 422, headers: {}, body: { "error" => { "code" => "amount_limit_exceeded", "message" => "too large" } } },
+      []
+    )
+    operation = {
+      "id" => "op_limit", "amount" => 200_000,
+      "payout_requisite" => { "sbp" => { "phone" => "79001234567", "bank_code" => "044525225" } }
+    }
+
+    result = service.create_request(operation, request_method: :sbp)
+
+    assert_equal false, result[:success]
+    assert_equal :unprocessable_entity, result[:code]
+    assert_equal "operation.amount_limit_exceeded", result[:message]
   end
 
   private

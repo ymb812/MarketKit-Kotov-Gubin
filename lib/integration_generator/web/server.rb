@@ -107,8 +107,7 @@ module IntegrationGenerator
       end
 
       def json_error(response, status, code, message, location = nil)
-        error = { "code" => code, "message" => message }
-        error["location"] = location if location
+        error = IntegrationGenerator::DiagnosticRemediation.for_error(code, message, location)
         json(response, status, "error" => error)
       end
     end

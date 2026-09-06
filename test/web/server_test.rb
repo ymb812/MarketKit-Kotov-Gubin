@@ -64,6 +64,24 @@ class WebServerTest < Minitest::Test
     assert_equal 403, call(request(method: "GET", path: "/api/download/web-1234567890abcdef/demo_service.rb", headers: { "origin" => "https://evil.example" })).status
   end
 
+  def test_invalid_spec_error_includes_source_remediation
+    application = Object.new
+    def application.analyze(_input)
+      raise IntegrationGenerator::Error.new("REF_NOT_FOUND", "Reference is missing", location: "#/paths/~1payouts")
+    end
+    @server = IntegrationGenerator::Web::Server.new(root: TestPaths::ROOT, application: application)
+
+    response = call(request(
+      method: "POST", path: "/api/analyze",
+      headers: { "content-type" => "application/json" }, body: JSON.generate("specification" => "openapi: 3.0.3")
+    ))
+    error = JSON.parse(response.body).fetch("error")
+
+    assert_equal 422, response.status
+    assert_equal "invalid_spec", error["kind"]
+    assert_equal "specification", error.dig("target", "focus")
+  end
+
   private
 
   def server

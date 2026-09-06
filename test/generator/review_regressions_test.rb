@@ -30,8 +30,8 @@ class ReviewRegressionsTest < Minitest::Test
     add_override("confirmed", "operation.confirmed")
     service = generated_service
 
-    assert_raises(ArgumentError) { service.create_request(operation) }
-    request = service.create_request(operation.merge("confirmed" => false))
+    assert_raises(ArgumentError) { service.build_provider_request(operation) }
+    request = service.build_provider_request(operation.merge("confirmed" => false))
     assert_equal false, request.dig(:body, "confirmed")
     assert_equal false, IntegrationGenerator::Generator::Support.dig_path({ "confirmed" => false }, "confirmed")
   end
@@ -39,10 +39,10 @@ class ReviewRegressionsTest < Minitest::Test
   def test_nested_required_field_is_checked_after_composite_projection
     service = generated_service
     value = operation
-    value["payout_requisite"].delete("type")
+    value["payout_requisite"]["sbp"].delete("phone")
 
-    error = assert_raises(ArgumentError) { service.create_request(value) }
-    assert_includes error.message, "body.recipient.type"
+    error = assert_raises(ArgumentError) { service.build_provider_request(value) }
+    assert_includes error.message, "recipient.phone"
   end
 
   def test_required_nullable_field_preserves_explicit_null_but_rejects_absence
@@ -52,20 +52,20 @@ class ReviewRegressionsTest < Minitest::Test
     add_override("memo", "operation.memo")
     service = generated_service
 
-    assert_raises(ArgumentError) { service.create_request(operation) }
-    body = service.create_request(operation.merge("memo" => nil))[:body]
+    assert_raises(ArgumentError) { service.build_provider_request(operation) }
+    body = service.build_provider_request(operation.merge("memo" => nil))[:body]
     assert body.key?("memo")
     assert_nil body["memo"]
     schema["required"].delete("memo")
     service = generated_service
-    refute service.create_request(operation)[:body].key?("memo")
-    assert service.create_request(operation.merge("memo" => nil))[:body].key?("memo")
+    refute service.build_provider_request(operation)[:body].key?("memo")
+    assert service.build_provider_request(operation.merge("memo" => nil))[:body].key?("memo")
   end
 
   def test_schema_declared_child_can_be_added_by_override
     @raw.dig("components", "schemas", "Recipient", "properties")["routing"] = { "type" => "string" }
     add_override("recipient.routing", "operation.routing")
-    request = generated_service.create_request(operation.merge("routing" => "route-1"))
+    request = generated_service.build_provider_request(operation.merge("routing" => "route-1"))
 
     assert_equal "route-1", request.dig(:body, "recipient", "routing")
   end
@@ -85,7 +85,7 @@ class ReviewRegressionsTest < Minitest::Test
       "routes" => { "first" => { "enabled" => false, "host_only" => "drop" } },
       "host_only" => "drop"
     )
-    result = generated_service.create_request(value).dig(:body, "recipient")
+    result = generated_service.build_provider_request(value).dig(:body, "recipient")
 
     assert_equal({ "dynamic" => { "kept" => false } }, result["metadata"])
     assert_equal({ "first" => { "enabled" => false } }, result["routes"])
@@ -101,10 +101,10 @@ class ReviewRegressionsTest < Minitest::Test
     }
     add_override("items", "operation.items")
     value = operation.merge("items" => [{ "code" => "one", "host_only" => "drop" }])
-    assert_equal [{ "code" => "one" }], generated_service.create_request(value).dig(:body, "items")
+    assert_equal [{ "code" => "one" }], generated_service.build_provider_request(value).dig(:body, "items")
     schema["properties"]["items"].delete("items")
     service = generated_service
-    assert_raises(Provider::ReviewProbeService::ConfigurationError) { service.create_request(value) }
+    assert_raises(Provider::ReviewProbeService::ConfigurationError) { service.build_provider_request(value) }
   end
 
   def test_ambiguous_webhook_header_and_id_remain_unset_until_explicit_override
@@ -147,8 +147,9 @@ class ReviewRegressionsTest < Minitest::Test
       { "payout_id" => "unsigned-id", "status" => "completed" },
       raw_body: raw, headers: { "X-NovaPay-Signature" => signature }
     )
-    assert_equal "signed-id", result[:provider_operation_id]
-    assert_equal :rejected, result[:status]
+    assert_equal true, result[:success]
+    assert_equal [{ action: :reject, operation_id: "signed-id", reason: "operation.provider_error" }],
+                 service.platform_actions
   ensure
     ENV["REVIEW_PROBE_WEBHOOK_SECRET"] = previous
   end
@@ -196,8 +197,8 @@ class ReviewRegressionsTest < Minitest::Test
 
   def operation
     {
-      "id" => "op-1", "idempotency_key" => "idem-1", "amount" => "15.25", "currency" => "RUB",
-      "payout_requisite" => { "type" => "sbp", "phone" => "79001234567", "bank_code" => "044525225" }
+      "id" => "op-1", "amount" => "15.25",
+      "payout_requisite" => { "sbp" => { "phone" => "79001234567", "bank_code" => "044525225" } }
     }
   end
 end

@@ -11,6 +11,35 @@ $LOAD_PATH.unshift(File.join(HACKGENESIS_TEST_ROOT, "lib"))
 
 require "integration_generator"
 
+module Provider
+  class BaseService
+    attr_reader :platform_actions
+
+    def initialize
+      @platform_actions = []
+    end
+
+    def success(payload = nil, **keywords)
+      data = payload.is_a?(Hash) ? payload : {}
+      { success: true }.merge(data).merge(keywords)
+    end
+
+    def failure(code, message)
+      { success: false, code: code, message: message }
+    end
+
+    def approve_operation(operation_id)
+      @platform_actions << { action: :approve, operation_id: operation_id }
+      success
+    end
+
+    def reject_operation(operation_id, reason)
+      @platform_actions << { action: :reject, operation_id: operation_id, reason: reason }
+      success
+    end
+  end
+end
+
 module TestPaths
   ROOT = HACKGENESIS_TEST_ROOT
 

@@ -36,6 +36,7 @@ module IntegrationGenerator
           return IR::Schema.new(empty_schema("unknown"))
         end
 
+        source_location = schema[RefResolver::SOURCE_LOCATION_EXTENSION] || location
         unsupported = schema.keys.reject { |keyword| SUPPORTED_KEYWORDS.include?(keyword) || keyword.start_with?("x-") }
         unsupported << "type" if unsupported_type_union?(schema["type"])
         unsupported.uniq!
@@ -43,7 +44,7 @@ module IntegrationGenerator
           warning(
             "UNSUPPORTED_SCHEMA_KEYWORD",
             "Schema keyword '#{keyword}' is not normalized in V0",
-            "#{location}/#{keyword}"
+            "#{source_location}/#{keyword}"
           )
         end
 
@@ -60,10 +61,10 @@ module IntegrationGenerator
           "default" => schema["default"],
           "example" => schema["example"],
           "examples" => array_or_empty(schema["examples"]),
-          "properties" => parse_properties(schema["properties"], location),
+          "properties" => parse_properties(schema["properties"], source_location),
           "required" => array_or_empty(schema["required"]).map(&:to_s),
-          "items" => parse_items(schema["items"], location),
-          "additional_properties" => parse_additional_properties(schema, location),
+          "items" => parse_items(schema["items"], source_location),
+          "additional_properties" => parse_additional_properties(schema, source_location),
           "constraints" => parse_constraints(schema),
           "unsupported_keywords" => unsupported
         )

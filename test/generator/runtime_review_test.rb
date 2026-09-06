@@ -38,7 +38,7 @@ class RuntimeReviewTest < Minitest::Test
     service, client = generated_service
     [[402, "balance_error"], [422, "client_error"], [500, "fallback"]].each do |http, field|
       client.response = { status: http, headers: { "retry-after" => "12" }, body: { field => { "code" => "provider-code", "message" => "detail" } } }
-      result = service.create_payout(operation)
+      result = service.send(:normalize_response, client.response, "create_payout")
       assert_equal false, result[:success]
       assert_equal http, result[:http_status]
       assert_equal "provider-code", result[:provider_code]
@@ -49,15 +49,20 @@ class RuntimeReviewTest < Minitest::Test
 
   def test_declared_http_errors_are_normalized_and_invalid_json_is_explicit
     service, client = generated_service
-    [400, 401, 402, 422, 429, 500].each do |http|
+    expected_codes = {
+      400 => :bad_request, 401 => :unauthorized, 402 => :unprocessable_entity,
+      422 => :unprocessable_entity, 429 => :too_many_requests, 500 => :internal_server_error
+    }
+    expected_codes.each do |http, expected_code|
       client.response = { status: http, headers: {}, body: { "code" => "error", "message" => "detail" } }
       result = service.create_payout(operation)
       assert_equal false, result[:success]
-      assert_equal http, result[:http_status]
-      assert_equal client.response[:body], result[:raw]
+      assert_equal expected_code, result[:code]
     end
     client.response = { status: 200, headers: {}, body: "{broken" }
-    assert_raises(Provider::RuntimeReviewService::ProviderError) { service.fetch_status({ "provider_operation_id" => "np_1" }) }
+    assert_raises(Provider::RuntimeReviewService::ProviderError) do
+      service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1" })
+    end
   end
 
   def test_auth_uses_available_or_alternative
@@ -66,7 +71,7 @@ class RuntimeReviewTest < Minitest::Test
     ENV.delete("RUNTIME_REVIEW_API_KEY")
     ENV["RUNTIME_REVIEW_BEARER_TOKEN"] = "token-only"
     service, = generated_service
-    assert_equal "Bearer token-only", service.create_request(operation)[:headers]["Authorization"]
+    assert_equal "Bearer token-only", service.build_provider_request(operation)[:headers]["Authorization"]
   end
 
   def test_success_response_mapping_uses_actual_http_status_after_empty_response
@@ -79,11 +84,12 @@ class RuntimeReviewTest < Minitest::Test
     [[201, "result", "id"], [202, "queued", "payout_id"]].each do |http, parent, field|
       client.response = { status: http, headers: {}, body: { parent => { field => "id-#{http}", "status" => "completed" } } }
       result = service.create_payout(operation)
-      assert_equal "id-#{http}", result[:provider_operation_id]
-      assert_equal :approved, result[:status]
+      assert_equal "id-#{http}", result.dig(:result, :id)
     end
     client.response = { status: 204, headers: {}, body: "" }
-    assert_equal true, service.create_payout(operation)[:success]
+    result = service.create_payout(operation)
+    assert_equal false, result[:success]
+    assert_equal "operation.provider_response_invalid", result[:message]
   end
 
   def test_exact_success_schema_takes_precedence_over_range_even_when_empty
@@ -94,11 +100,11 @@ class RuntimeReviewTest < Minitest::Test
     }
     service, client = generated_service
     client.response = { status: 201, headers: {}, body: { "exact" => { "id" => "correct" }, "fallback" => { "payout_id" => "wrong" } } }
-    assert_equal "correct", service.create_payout(operation)[:provider_operation_id]
+    assert_equal "correct", service.create_payout(operation).dig(:result, :id)
     client.response = { status: 202, headers: {}, body: { "fallback" => { "payout_id" => "range" } } }
-    assert_equal "range", service.create_payout(operation)[:provider_operation_id]
+    assert_equal "range", service.create_payout(operation).dig(:result, :id)
     client.response = { status: 204, headers: {}, body: { "fallback" => { "payout_id" => "must-not-use" } } }
-    refute service.create_payout(operation).key?(:provider_operation_id)
+    assert_equal false, service.create_payout(operation)[:success]
   end
 
   def test_and_auth_uses_distinct_secrets_and_requires_both
@@ -111,19 +117,19 @@ class RuntimeReviewTest < Minitest::Test
     second_env = schemes.fetch("PartnerKey").fetch("config_env")
     refute_equal first_env, second_env
     ENV[first_env] = "private-key"
-    assert_raises(Provider::RuntimeReviewService::ConfigurationError) { service.create_request(operation) }
+    assert_raises(Provider::RuntimeReviewService::ConfigurationError) { service.build_provider_request(operation) }
     ENV[second_env] = "partner-key"
-    request = service.create_request(operation)
+    request = service.build_provider_request(operation)
     assert_equal "private-key", request[:headers]["X-API-Key"]
     assert_equal "partner-key", request[:query]["partner_key"]
   end
 
   def test_amount_conversion_is_exact_and_reports_fractional_minor_units
     service, = generated_service
-    assert_equal 101, service.create_request(operation)[:body]["amount"]
-    error = assert_raises(ArgumentError) { service.create_request(operation.merge("amount" => "1.001")) }
+    assert_equal 101, service.build_provider_request(operation)[:body]["amount"]
+    error = assert_raises(ArgumentError) { service.build_provider_request(operation.merge("amount" => "1.001")) }
     assert_includes error.message, "integral provider minor units"
-    assert_raises(ArgumentError) { service.create_request(operation.merge("amount" => "NaN")) }
+    assert_raises(ArgumentError) { service.build_provider_request(operation.merge("amount" => "NaN")) }
   end
 
   def test_read_only_request_fields_are_not_required_or_sent
@@ -133,7 +139,7 @@ class RuntimeReviewTest < Minitest::Test
     service, = generated_service
     input = operation
     input["payout_requisite"]["server_token"] = "host-internal"
-    request = service.create_request(input)
+    request = service.build_provider_request(input)
     refute request[:body]["recipient"].key?("server_token")
     media = @last_manifest.to_h["operations"].find { |entry| entry["key"] == "POST /payouts" }.dig("contract", "request_body", "content", "application/json")
     sample = IntegrationGenerator::Generator::Support.schema_fixture(media["schema"], direction: :request)
@@ -146,14 +152,14 @@ class RuntimeReviewTest < Minitest::Test
     status_operation["parameters"] << { "name" => "merchant_id", "in" => "path", "required" => true, "schema" => { "type" => "string" } }
     @raw["paths"]["/merchants/{merchant_id}/payouts/{payout_id}"] = { "get" => status_operation }
     service, = generated_service
-    assert_raises(ArgumentError) { service.fetch_status({ "provider_operation_id" => "np_1" }) }
+    assert_raises(ArgumentError) { service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1" }) }
 
     @overrides["field_mappings"]["fetch_status"] = { "request" => [
       { "target" => "merchant_id", "location" => "path", "source" => "operation.merchant_id", "confirm" => true }
     ] }
     service, client = generated_service
     client.response = { status: 200, headers: {}, body: { "id" => "np_1", "status" => "completed" } }
-    service.fetch_status({ "provider_operation_id" => "np_1", "merchant_id" => "m/2" })
+    service.fetch_status({ "id" => "op_1", "provider_operation_key" => "np_1", "merchant_id" => "m/2" })
     assert_equal "https://api.sandbox.novapay.example/v1/merchants/m%2F2/payouts/np_1", client.requests.last[:url]
   end
 
@@ -194,7 +200,7 @@ class RuntimeReviewTest < Minitest::Test
   end
 
   def operation
-    { "id" => "op_1", "idempotency_key" => "idem", "amount" => "1.01", "currency" => "RUB",
-      "payout_requisite" => { "type" => "sbp", "phone" => "79001234567", "bank_code" => "044525225" } }
+    { "id" => "op_1", "amount" => "1.01",
+      "payout_requisite" => { "sbp" => { "phone" => "79001234567", "bank_code" => "044525225" } } }
   end
 end

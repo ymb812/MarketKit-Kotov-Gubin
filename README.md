@@ -99,10 +99,10 @@ UI работает поверх того же Ruby pipeline; JavaScript тол�
 Короткий сценарий показа:
 
 1. Выберите canonical payout API. Покажите capabilities, endpoints, confidence/evidence и предупреждения.
-2. Нажмите «Открыть overrides», просмотрите YAML, включите «Применить overrides при следующем анализе», затем нажмите «Анализировать». В обзоре предупреждения сокращаются с 6 до 1; callback secret остаётся явной runtime-настройкой.
+2. Нажмите «Открыть overrides», просмотрите YAML, включите «Применить overrides при следующем анализе», затем нажмите «Анализировать». В обзоре предупреждения сокращаются с 8 до 1; callback secret остаётся явной runtime-настройкой.
 3. Откройте «Преобразования» и «Подключение»: ×100, подтверждённые статусы, host/provider fields, signature header/encoding и HTTP errors.
 4. Нажмите «Сгенерировать пакет». Пять файлов доступны в preview, по одному и архивом `.tar.gz`; копия всегда сохраняется в новом `output/web-<id>/` после `ruby -c`.
-5. Переключитесь на transfer API (JSON, Bearer, 2 capabilities) и withdrawal API (YAML, Basic, nested payload). У withdrawal JSON override переводит capabilities 4 → 5, warnings 9 → 1.
+5. Переключитесь на transfer API (JSON, Bearer, 2 capabilities) и withdrawal API (YAML, Basic, nested payload). У withdrawal JSON override переводит capabilities 4 → 5, warnings 11 → 1.
 
 Свой файл: в «Обзоре» справа от «Входная спецификация» нажмите «Загрузить свою OpenAPI ↑». Можно также загрузить YAML/JSON в панели OpenAPI раздела «Спецификация» или вставить текст в редактор. Изменение входа сбрасывает старый результат; генерация доступна только после нового успешного анализа. Лимит загружаемого файла — 1 МБ, всего JSON-запроса — 2 МБ. Не помещайте реальные credentials в demo-spec: секреты нужны в ENV host-приложения, а не генератору.
 
@@ -185,11 +185,13 @@ bundle exec ruby bin/integrate generate --manifest output/checkpoint_novapay/int
 
 Generated service блокирует неподтверждённые mappings и неполную raw-body webhook verification. Параметры `allow_unreviewed: true` / `allow_unverified: true` предназначены только для явного inspection/demo, не для production.
 
-По уточнённому контракту Q&A `process_callback(payload)` принимает разобранный JSON Hash. Этот метод выполняет mapping и возвращает `signature_verification: :host_required`: проверка подлинности входящего уведомления — ответственность HTTP-слоя хоста до применения результата. Для обработки с проверкой подписи используйте `process_verified_callback(raw_body, headers:)`: метод проверяет HMAC по исходным байтам и обрабатывает именно подписанное тело. Старые вызовы `process_callback` с явными `raw_body`/`headers` сохраняют путь проверки подписи. Нельзя восстановить подписанные байты повторной сериализацией Hash.
+По уточнённому контракту Q&A `create_request` отправляет запрос, разбирает ответ и возвращает `success(result: { id: provider_id })`; платформа сохраняет этот id как `provider_operation_key`. `fetch_status` и `process_callback` не возвращают новый статус в `result`: подтверждённые terminal statuses применяются через `approve_operation` / `reject_operation`, а in-progress/unknown не меняют операцию. `create_payout` сохранён как совместимый alias, а `build_provider_request` — как отдельная граница для inspection и contract tests.
 
-Статус берётся из подтверждённого payload mapping, event возвращается отдельно и не переопределяет его. Неизвестный статус (включая неописанный `accepted`) остаётся `unknown`. Error response содержит HTTP/code/message/Retry-After/raw; retry, блокировка провайдера и сохранение provider operation id выполняются хостом. В примере задания HTTP 402 соответствует `insufficient_balance` и действию `retry later`; генератор сам не отправляет повторные выплаты.
+Гарантированные входы host operation: `id`, `amount`, `payout_requisite`. Для СБП canonical mapping читает `payout_requisite.sbp.phone/bank_code/bank_name`, для карты — плоский `payout_requisite.card_number`. Неизвестный обязательный реквизит не связывается с одноимённым ключом автоматически: manifest оставляет TODO до явного решения интегратора.
 
-Generic status synonyms сохраняются в manifest как предложения, но generated runtime использует их только после подтверждения override. До подтверждения runtime возвращает `unknown`, а fixtures не обещают соответствующий normalized status. Для старых manifests это правило также определяется по `provenance: default_rule`.
+`process_callback(payload)` принимает parsed Hash после аутентификации на HTTP-границе хоста. `process_verified_callback(raw_body, headers:)` проверяет HMAC по исходным байтам и разбирает именно подписанное тело; повторная сериализация Hash для проверки запрещена. Статус берётся из подтверждённого payload mapping, event его не переопределяет. HTTP errors преобразуются в стандартные платформенные symbols (`unauthorized`, `too_many_requests`, `unprocessable_entity` и другие), а `amount_limit_exceeded` отклоняет конкретную выплату как validation failure.
+
+Generic status synonyms сохраняются в manifest как предложения, но generated runtime использует их только после подтверждения override. До подтверждения terminal helper не вызывается, а fixtures не обещают смену статуса. Для старых manifests это правило также определяется по `provenance: default_rule`.
 
 Проекция composite values — консервативная политика adapter: именованные properties разрешены; явный `additionalProperties: true` разрешает остальные ключи, schema-valued `additionalProperties` проецирует их рекурсивно. Если `additionalProperties` не задан, adapter переносит только именованные properties; это политика экспорта host-модели, а не утверждение, что OpenAPI запрещает дополнительные свойства. У object без properties/явной политики и array без items граница неизвестна — generated service выдаёт ошибку. Обязательные поля проверяются на итоговом body после parent/child mappings. Per-item пути вида `items[].field` пока требуют отдельной поддержки; whole-array mapping доступен при определённой items schema.
 
@@ -229,14 +231,14 @@ Override-файл имеет независимую версию `override_versi
 
 - `operations` — intent по точному ключу `METHOD /path`;
 - `status_mapping` — provider status → `approved`, `rejected`, `in_progress` или `unknown`;
-- `field_mappings` — явный `operation.*` host source и `confirm: true`; body-field может быть добавлен по существующему пути request schema, даже если анализатор не узнал его имя;
+- `field_mappings` — явный `operation.*` host source, логический `request_method` либо scalar `value`, плюс `confirm: true`; body-field можно добавить только по существующему пути request schema;
 - `transformations.amount` — provider unit, direction и положительный factor;
 - `transformations.conditional_requirements` — проверяемый `required_if` по существующим request fields;
 - `webhook.signature` — поддержанные algorithm/encoding и выбор объявленного header;
 - `webhook.payload` — явные event/status/id/error paths из объявленной webhook schema;
 - `resolve_warnings` — точные warning selectors, сохраняемые в audit.
 
-Схема строгая: неизвестный ключ, operation, capability, field/status/warning или недопустимое значение завершают команду предметной ошибкой вида `[OVERRIDE_UNKNOWN_FIELD]` / `[OVERRIDE_INVALID_VALUE]`. `Idempotency-Key` становится подтверждённым только при явном host mapping, например `source: operation.idempotency_key`.
+Схема строгая: неизвестный ключ, operation, capability, field/status/warning или недопустимое значение завершают команду предметной ошибкой вида `[OVERRIDE_UNKNOWN_FIELD]` / `[OVERRIDE_INVALID_VALUE]`. `source` и `value` взаимоисключающие. В canonical override `recipient.type` берётся из `request_method`, валюта задана константой `RUB`, а idempotency header — из гарантированного `operation.id`.
 
 Пример ошибки:
 
@@ -327,7 +329,7 @@ Parser поддерживает OpenAPI 3.x YAML/JSON, local JSON Pointer refere
 - исполнение OAuth/OpenID/mTLS авторизации;
 - exact production `Provider::BaseService`, operation model и HTTP client contract — generated service предоставляет документированный adapter boundary.
 
-Unsupported schema/auth/callback constructs становятся warnings. Broken, external или cyclic `$ref` завершают parsing предметной ошибкой. Обычный `POST /webhooks/...` остаётся стандартной HTTP operation и уже извлекается.
+Unsupported schema/auth/callback constructs становятся warnings. В Payout Studio они разделены на `reviewable`, `manual_configuration`, `unsupported` и `invalid_spec`; только `reviewable` предлагает override. Для `oneOf` UI объясняет границу поддержки, показывает исходную строку и не обещает исправление через override. Broken, external или cyclic `$ref` завершают parsing предметной ошибкой. Обычный `POST /webhooks/...` остаётся стандартной HTTP operation и уже извлекается.
 
 ## Тесты
 
@@ -351,4 +353,4 @@ node --test test/web/frontend_test.js
 
 ## Статус
 
-Матрица, ревью, документация и связный текст третьего чекпоинта завершены. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 123 tests / 749 assertions; три demo bundles, manifest-only byte match и Windows root launch проверены. Видео, синхронизация, deck и репетиция в фактическом presentation browser остаются отдельным следующим этапом. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.
+Матрица, ревью, документация и поздняя contract/remediation-итерация завершены. Основные документы: [JURY_GUIDE.md](JURY_GUIDE.md), [MODULE_MAP.md](MODULE_MAP.md), [PRESENTATION_CONTENT.md](PRESENTATION_CONTENT.md) и [DEMO_GUIDE.md](DEMO_GUIDE.md). Финальная suite core — 134 tests / 792 assertions; frontend logic — 7/7; три demo bundles, manifest-only byte match, браузерные `oneOf`/broken-ref переходы и Windows HTTP generation/download из Unicode-пути проверены. Следующий этап — принять новые QA, затем подготовить deck и провести репетицию в фактическом presentation browser. Generated service spec, расширение OpenAPI subset и глубокая декомпозиция сохранены в backlog.

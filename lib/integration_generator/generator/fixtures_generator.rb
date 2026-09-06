@@ -213,7 +213,8 @@ module IntegrationGenerator
           "processing" => {
             "method" => "process_callback",
             "input" => "parsed_json_object",
-            "signature_verification" => "host_required",
+            "authentication" => "host_required",
+            "terminal_status_effect" => "approve_operation / reject_operation",
             "verified_method" => "process_verified_callback"
           },
           "signature" => {
@@ -230,13 +231,15 @@ module IntegrationGenerator
         provider_status = Support.dig_path(body, payload["status_path"])
         status = @manifest.dig("status_mapping", "mappings", provider_status.to_s)
         normalized = status["normalized"] if status && !status["requires_review"] && status["provenance"] != "default_rule"
+        action = case normalized
+                 when "approved" then "approve_operation"
+                 when "rejected" then "reject_operation"
+                 else "no_status_change"
+                 end
         {
-          "event" => Support.dig_path(body, payload["event_path"]),
           "provider_operation_id" => Support.dig_path(body, payload["provider_operation_id_path"]),
-          "external_id" => Support.dig_path(body, payload["external_id_path"]),
           "provider_status" => provider_status,
-          "normalized_status" => normalized == "unknown" ? nil : normalized,
-          "signature_verification" => "host_required",
+          "platform_action" => action,
           "error" => Support.dig_path(body, payload["error_path"])
         }.reject { |_key, value| value.nil? }
       end
